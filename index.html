@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="nl" style="scroll-behavior: smooth;">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Factuurlijk - Eenvoudig Factureren</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/npm/@tailwindcss/forms@0.5.7/dist/forms.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><path d=%22M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z%22 fill=%22%2314b8a6%22/><path d=%22M14 2V8H20%22 fill=%22%230d9488%22/></svg>">
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "jspdf": "https://aistudiocdn.com/jspdf@^3.0.3",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "html2canvas": "https://aistudiocdn.com/html2canvas@^1.4.1",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.45.0"
+  }
+}
+</script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Manrope', 'sans-serif'],
+          },
+        },
+      },
+    }
+  </script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-slate-100 text-zinc-800 font-sans">
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
