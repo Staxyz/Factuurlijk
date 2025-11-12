@@ -36,43 +36,85 @@ export const AuthPage: React.FC<AuthPageProps> = ({ view, onSwitchView, onBackTo
     setLoading(true);
     setError(null);
 
-    let authError = null;
-
-    if (isLogin) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      authError = error;
-    } else {
-      const { error } = await supabase.auth.signUp({ 
-        email, 
-        password, 
-        options: { data: { full_name: name } } 
-      });
-      authError = error;
+    try {
+      if (isLogin) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          setError(error.message);
+        }
+        // On success, the onAuthStateChange listener in App.tsx will handle navigation.
+      } else {
+        // Sign up
+        const { data, error } = await supabase.auth.signUp({ 
+          email, 
+          password, 
+          options: { 
+            data: { full_name: name },
+            emailRedirectTo: window.location.origin
+          } 
+        });
+        
+        if (error) {
+          setError(error.message);
+        } else if (data.user) {
+          // Check if email confirmation is required
+          if (data.session) {
+            // User is immediately logged in (email confirmation disabled)
+            console.log('User signed up and logged in immediately');
+            // The onAuthStateChange listener will handle navigation
+          } else {
+            // Email confirmation is required
+            alert('Registratie succesvol! Controleer je e-mail voor de verificatielink om je account te activeren.');
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Unexpected error during auth:', err);
+      setError('Er is een onverwachte fout opgetreden. Probeer het opnieuw.');
+    } finally {
+      setLoading(false);
     }
-
-    if (authError) {
-      setError(authError.message);
-    } 
-    // On success, the onAuthStateChange listener in App.tsx will handle navigation.
-    // If sign up is successful, Supabase might send a confirmation email. We can add a message for that.
-    else if (!isLogin) {
-        alert('Registratie succesvol! Controleer je e-mail voor de verificatielink.');
-    }
-
-    setLoading(false);
   };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-    });
-    if (error) {
-        setError(error.message);
-        setLoading(false);
+    
+    try {
+      // Get the current origin (works for both localhost and production)
+      // Make sure this matches exactly with what's configured in Supabase Dashboard > Authentication > URL Configuration
+      const redirectUrl = `${window.location.origin}`;
+      
+      console.log('=== Google OAuth Debug Info ===');
+      console.log('Current origin:', window.location.origin);
+      console.log('Full URL:', window.location.href);
+      console.log('Redirect URL:', redirectUrl);
+      console.log('===============================');
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+              redirectTo: redirectUrl,
+              skipBrowserRedirect: false,
+          },
+      });
+      
+      if (error) {
+          console.error('Google OAuth error:', error);
+          console.error('Error details:', JSON.stringify(error, null, 2));
+          setError(error.message || 'Er is een fout opgetreden bij het inloggen met Google. Controleer je Supabase configuratie.');
+          setLoading(false);
+      } else {
+          // If successful, the browser will redirect to Google
+          // The redirect will happen automatically, so we don't need to do anything here
+          console.log('Google OAuth initiated successfully, redirecting to Google...');
+          console.log('OAuth data:', data);
+      }
+    } catch (err) {
+      console.error('Unexpected error during Google OAuth:', err);
+      setError('Er is een onverwachte fout opgetreden. Probeer het opnieuw.');
+      setLoading(false);
     }
-    // On success, Supabase redirects to the SITE_URL and the listener handles the session.
   };
 
   const isLogin = view === 'login';

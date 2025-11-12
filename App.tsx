@@ -69,6 +69,60 @@ const App: React.FC = () => {
   const [isSavingInvoice, setIsSavingInvoice] = useState(false);
   const isSavingRef = useRef(false); // Ref for synchronous check to prevent race conditions
 
+  // --- Function to create a new user profile ---
+  const createUserProfile = useCallback(async (user: User): Promise<UserProfile | null> => {
+    try {
+      const userMetadata = user.user_metadata || {};
+      const fullName = userMetadata.full_name || user.email?.split('@')[0] || 'Nieuwe Gebruiker';
+      
+      const newProfile: Omit<UserProfile, 'id' | 'updated_at'> = {
+        name: fullName,
+        email: user.email || '',
+        address: '',
+        kvk_number: null,
+        btw_number: null,
+        iban: null,
+        logo_url: null,
+        template_style: 'corporate',
+        template_customizations: null,
+        plan: 'free',
+        invoice_footer_text: null,
+        phone_number: null,
+      };
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          ...newProfile,
+          updated_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) {
+        // If profile already exists, that's okay - just fetch it
+        if (error.code === '23505') { // Unique violation
+          console.log('Profile already exists, fetching...');
+          const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single();
+          return existingProfile;
+        }
+        throw error;
+      }
+
+      console.log('New user profile created:', data);
+      return data;
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, 'Fout bij het aanmaken van profiel.');
+      console.error('Error creating user profile:', message, error);
+      return null;
+    }
+  }, []);
+
   // --- NEW: Centralized Data Fetching Function ---
   const fetchData = useCallback(async (user: User) => {
     setLoading(true);
@@ -85,7 +139,7 @@ const App: React.FC = () => {
         .eq('user_id', user.id)
         .order('name', { ascending: true });
 
-      // --- Profile Fetching Logic with Retries ---
+      // --- Profile Fetching Logic with Retries and Auto-Creation ---
       let profileData: UserProfile | null = null;
       let lastProfileError: any = null;
       const maxRetries = 4;
@@ -109,6 +163,16 @@ const App: React.FC = () => {
           break;
         }
         
+        // If profile doesn't exist and this is the first attempt, try to create it
+        if (i === 0 && (!data || data.length === 0)) {
+          console.log('Profile not found, creating new profile for user:', user.id);
+          const newProfile = await createUserProfile(user);
+          if (newProfile) {
+            profileData = newProfile;
+            break;
+          }
+        }
+        
         if (i < maxRetries - 1) {
           console.warn(`Profile not found for user ${user.id}, retrying in ${delay}ms... (Attempt ${i + 2}/${maxRetries})`);
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -120,8 +184,14 @@ const App: React.FC = () => {
         setUserProfile(profileData);
       } else {
         if (lastProfileError) throw lastProfileError;
-        console.error("User profile could not be fetched after multiple retries. Using fallback data.");
-        setUserProfile({ ...mockUserProfile, id: user.id, email: user.email || '' });
+        console.error("User profile could not be fetched or created. Using fallback data.");
+        // Try one more time to create the profile
+        const fallbackProfile = await createUserProfile(user);
+        if (fallbackProfile) {
+          setUserProfile(fallbackProfile);
+        } else {
+          setUserProfile({ ...mockUserProfile, id: user.id, email: user.email || '' });
+        }
       }
       
       // --- Handle other data ---
@@ -144,6 +214,33 @@ const App: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  }, [createUserProfile]);
+
+  // Handle OAuth callback from hash fragments or query parameters
+  useEffect(() => {
+    // Check if we're returning from an OAuth redirect
+    // Supabase can use either hash fragments (#) or query parameters (?)
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const queryParams = new URLSearchParams(window.location.search);
+    
+    const accessToken = hashParams.get('access_token') || queryParams.get('access_token');
+    const error = hashParams.get('error') || queryParams.get('error');
+    const errorDescription = hashParams.get('error_description') || queryParams.get('error_description');
+
+    if (error) {
+      console.error('OAuth error:', error, errorDescription);
+      alert(`OAuth fout: ${errorDescription || error}`);
+      // Clean up the URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
+    }
+
+    if (accessToken) {
+      console.log('OAuth callback detected, session will be set by Supabase');
+      // The session will be set automatically by Supabase
+      // Clean up the URL hash/query
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }, []);
 
   // Supabase session management
@@ -153,10 +250,17 @@ const App: React.FC = () => {
         // Do not set loading false here, wait for data fetch
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.email);
       setSession(session);
       if (session) {
-        setView('dashboard');
+        // User is logged in - fetch their data (this will create profile if needed)
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          setView('dashboard');
+          // fetchData will be called by the useEffect below
+        } else {
+          setView('dashboard');
+        }
       } else {
         setView('landing');
         // Clear user-specific data on logout
