@@ -55,22 +55,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({ view, onSwitchView, onBackTo
         });
         
         if (error) {
-          console.error('Signup error details:', {
-            message: error.message,
-            status: error.status,
-            name: error.name,
-            error: error
-          });
+          console.error('=== SIGNUP ERROR DETAILS ===');
+          console.error('Message:', error.message);
+          console.error('Status:', error.status);
+          console.error('Name:', error.name);
+          console.error('Full error object:', JSON.stringify(error, null, 2));
+          console.error('============================');
           
           // Provide more specific error messages
           if (error.message.includes('User already registered') || error.message.includes('already registered')) {
             setError('Dit e-mailadres is al geregistreerd. Log in met je bestaande account.');
-          } else if (error.message.includes('Password')) {
+          } else if (error.message.includes('Password') || error.message.includes('password')) {
             setError('Wachtwoord moet minimaal 6 tekens lang zijn.');
-          } else if (error.message.includes('Email')) {
+          } else if (error.message.includes('Email') || error.message.includes('email')) {
             setError('Ongeldig e-mailadres. Controleer je invoer.');
+          } else if (error.message.includes('Database') || error.message.includes('database')) {
+            setError('Database fout. Controleer of de database correct is ingesteld. Check de console voor details.');
           } else {
-            setError(error.message || 'Er is een fout opgetreden bij het aanmaken van je account.');
+            setError(error.message || 'Er is een fout opgetreden bij het aanmaken van je account. Check de console (F12) voor details.');
           }
         } else if (data.user) {
           // Check if email confirmation is required
