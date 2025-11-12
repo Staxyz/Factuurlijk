@@ -55,17 +55,36 @@ export const AuthPage: React.FC<AuthPageProps> = ({ view, onSwitchView, onBackTo
         });
         
         if (error) {
-          setError(error.message);
+          console.error('Signup error details:', {
+            message: error.message,
+            status: error.status,
+            name: error.name,
+            error: error
+          });
+          
+          // Provide more specific error messages
+          if (error.message.includes('User already registered') || error.message.includes('already registered')) {
+            setError('Dit e-mailadres is al geregistreerd. Log in met je bestaande account.');
+          } else if (error.message.includes('Password')) {
+            setError('Wachtwoord moet minimaal 6 tekens lang zijn.');
+          } else if (error.message.includes('Email')) {
+            setError('Ongeldig e-mailadres. Controleer je invoer.');
+          } else {
+            setError(error.message || 'Er is een fout opgetreden bij het aanmaken van je account.');
+          }
         } else if (data.user) {
           // Check if email confirmation is required
           if (data.session) {
             // User is immediately logged in (email confirmation disabled)
             console.log('User signed up and logged in immediately');
             // The onAuthStateChange listener will handle navigation
+            // The database trigger should create the profile automatically
           } else {
             // Email confirmation is required
             alert('Registratie succesvol! Controleer je e-mail voor de verificatielink om je account te activeren.');
           }
+        } else {
+          setError('Er is een onverwachte fout opgetreden. Probeer het opnieuw.');
         }
       }
     } catch (err) {

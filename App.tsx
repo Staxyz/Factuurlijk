@@ -139,11 +139,12 @@ const App: React.FC = () => {
         .eq('user_id', user.id)
         .order('name', { ascending: true });
 
-      // --- Profile Fetching Logic with Retries and Auto-Creation ---
+      // --- Profile Fetching Logic with Retries ---
+      // The database trigger should create the profile automatically, so we just wait and retry
       let profileData: UserProfile | null = null;
       let lastProfileError: any = null;
-      const maxRetries = 4;
-      let delay = 1000;
+      const maxRetries = 6; // Increased retries to wait for database trigger
+      let delay = 500; // Start with shorter delay
 
       for (let i = 0; i < maxRetries; i++) {
         const { data, error } = await supabase
@@ -154,45 +155,49 @@ const App: React.FC = () => {
         
         if (error) {
           lastProfileError = error;
+          console.error(`Error fetching profile (attempt ${i + 1}):`, error);
+          // Don't break on error, keep retrying
+          if (i < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 1.5;
+            continue;
+          }
           break;
         }
 
         if (data && data.length > 0) {
           profileData = data[0];
           lastProfileError = null;
+          console.log('Profile found:', profileData);
           break;
         }
         
-        // If profile doesn't exist and this is the first attempt, try to create it
-        if (i === 0 && (!data || data.length === 0)) {
-          console.log('Profile not found, creating new profile for user:', user.id);
-          const newProfile = await createUserProfile(user);
-          if (newProfile) {
-            profileData = newProfile;
-            break;
-          }
-        }
-        
+        // Profile not found yet - wait for database trigger to create it
         if (i < maxRetries - 1) {
-          console.warn(`Profile not found for user ${user.id}, retrying in ${delay}ms... (Attempt ${i + 2}/${maxRetries})`);
+          console.log(`Profile not found for user ${user.id}, waiting for database trigger... (Attempt ${i + 1}/${maxRetries})`);
           await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2;
+          delay *= 1.5; // Exponential backoff
         }
       }
       
-      if (profileData) {
-        setUserProfile(profileData);
-      } else {
-        if (lastProfileError) throw lastProfileError;
-        console.error("User profile could not be fetched or created. Using fallback data.");
-        // Try one more time to create the profile
+      // If profile still doesn't exist after retries, try to create it manually (fallback)
+      if (!profileData) {
+        console.warn('Profile not created by database trigger, attempting manual creation as fallback...');
         const fallbackProfile = await createUserProfile(user);
         if (fallbackProfile) {
-          setUserProfile(fallbackProfile);
+          profileData = fallbackProfile;
+          console.log('Profile created manually as fallback');
         } else {
-          setUserProfile({ ...mockUserProfile, id: user.id, email: user.email || '' });
+          console.error("User profile could not be fetched or created. Using fallback data.");
+          if (lastProfileError) {
+            console.error('Last profile error:', lastProfileError);
+          }
+          // Use fallback profile data
+          profileData = { ...mockUserProfile, id: user.id, email: user.email || '' };
         }
       }
+      
+      setUserProfile(profileData);
       
       // --- Handle other data ---
       const [invoicesResult, customersResult] = await Promise.all([invoicesPromise, customersPromise]);
