@@ -72,35 +72,57 @@ const formatDate = (dateString: string) => {
 };
 
 const getDynamicStyling = (lineCount: number, templateStyle: TemplateStyle, isPdfMode?: boolean, previewSize?: 'small' | 'medium' | 'large') => {
-    // PDF Mode - Adjusted for more spacing.
-    if (isPdfMode) {
-        if (lineCount <= 6) return { fontSizeClass: 'text-[24px]', paddingClass: 'p-4' };
-        if (lineCount <= 12) return { fontSizeClass: 'text-[20px]', paddingClass: 'p-3' };
-        if (lineCount <= 18) return { fontSizeClass: 'text-[18px]', paddingClass: 'p-2' };
-        return { fontSizeClass: 'text-[16px]', paddingClass: 'p-2' };
+    // Special handling: When both isPdfMode and previewSize="large" are used,
+    // scale up the font sizes to match the visual appearance of the live preview on A4 paper
+    if (isPdfMode && previewSize === 'large') {
+        // Scale up font sizes for PDF to match live preview visual appearance
+        // The live preview uses smaller viewport, so we need larger fonts for A4 PDF
+        if (templateStyle === 'sidebar') {
+            if (lineCount <= 6) return { fontSizeClass: 'text-[18px]', paddingClass: 'p-3' };
+            if (lineCount <= 12) return { fontSizeClass: 'text-[15px]', paddingClass: 'p-2' };
+            if (lineCount <= 18) return { fontSizeClass: 'text-[13px]', paddingClass: 'p-2' };
+            if (lineCount <= 24) return { fontSizeClass: 'text-[12px]', paddingClass: 'p-1.5' };
+            if (lineCount <= 30) return { fontSizeClass: 'text-[11px]', paddingClass: 'p-1.5' };
+            return { fontSizeClass: 'text-[10px]', paddingClass: 'p-1' };
+        }
+        // Default styling for other templates - scaled up for PDF
+        if (lineCount <= 6) return { fontSizeClass: 'text-[20px]', paddingClass: 'p-3' };
+        if (lineCount <= 12) return { fontSizeClass: 'text-[17px]', paddingClass: 'p-2' };
+        if (lineCount <= 18) return { fontSizeClass: 'text-[15px]', paddingClass: 'p-2' };
+        if (lineCount <= 24) return { fontSizeClass: 'text-[14px]', paddingClass: 'p-1.5' };
+        if (lineCount <= 30) return { fontSizeClass: 'text-[13px]', paddingClass: 'p-1.5' };
+        return { fontSizeClass: 'text-[12px]', paddingClass: 'p-1' };
     }
     
-    // Live Previews by size
-    switch (previewSize) {
+    // If previewSize is specified (without isPdfMode), use that for live previews
+    if (previewSize) {
+        // Live Previews by size
+        switch (previewSize) {
         case 'large': // For Form & Template live preview pages.
              // Special, smaller font sizes for the sidebar template due to its narrow content area.
             if (templateStyle === 'sidebar') {
                 if (lineCount <= 6) return { fontSizeClass: 'text-[11px]', paddingClass: 'p-1.5' };
                 if (lineCount <= 12) return { fontSizeClass: 'text-[9px]', paddingClass: 'p-1' };
                 if (lineCount <= 18) return { fontSizeClass: 'text-[8px]', paddingClass: 'p-1' };
-                return { fontSizeClass: 'text-[7px]', paddingClass: 'p-0.5' };
+                if (lineCount <= 24) return { fontSizeClass: 'text-[7px]', paddingClass: 'p-0.5' };
+                if (lineCount <= 30) return { fontSizeClass: 'text-[6.5px]', paddingClass: 'p-0.5' };
+                return { fontSizeClass: 'text-[6px]', paddingClass: 'p-0.5' };
             }
             // Default styling for other templates in large preview
             if (lineCount <= 6) return { fontSizeClass: 'text-[13px]', paddingClass: 'p-2' };
             if (lineCount <= 12) return { fontSizeClass: 'text-[11px]', paddingClass: 'p-1' };
             if (lineCount <= 18) return { fontSizeClass: 'text-[10px]', paddingClass: 'p-1' };
-            return { fontSizeClass: 'text-[9px]', paddingClass: 'p-1' };
+            if (lineCount <= 24) return { fontSizeClass: 'text-[9px]', paddingClass: 'p-1' };
+            if (lineCount <= 30) return { fontSizeClass: 'text-[8px]', paddingClass: 'p-0.5' };
+            return { fontSizeClass: 'text-[7px]', paddingClass: 'p-0.5' };
 
         case 'medium': // For Sidebar.
             if (lineCount <= 6) return { fontSizeClass: 'text-[16px]', paddingClass: 'p-3' };
             if (lineCount <= 12) return { fontSizeClass: 'text-[14px]', paddingClass: 'p-2' };
             if (lineCount <= 18) return { fontSizeClass: 'text-[13px]', paddingClass: 'p-2' };
-            return { fontSizeClass: 'text-[12px]', paddingClass: 'p-1' };
+            if (lineCount <= 24) return { fontSizeClass: 'text-[12px]', paddingClass: 'p-1' };
+            if (lineCount <= 30) return { fontSizeClass: 'text-[11px]', paddingClass: 'p-1' };
+            return { fontSizeClass: 'text-[10px]', paddingClass: 'p-1' };
 
         case 'small': // For template selection buttons.
         default:
@@ -108,14 +130,30 @@ const getDynamicStyling = (lineCount: number, templateStyle: TemplateStyle, isPd
                 if (lineCount <= 4) return { fontSizeClass: 'text-[6px]', paddingClass: 'p-0.5' };
                 if (lineCount <= 8) return { fontSizeClass: 'text-[5px]', paddingClass: 'p-0.5' };
                 if (lineCount <= 12) return { fontSizeClass: 'text-[4.5px]', paddingClass: 'p-0.5' };
-                return { fontSizeClass: 'text-[4px]', paddingClass: 'p-0.5' };
+                if (lineCount <= 18) return { fontSizeClass: 'text-[4px]', paddingClass: 'p-0.5' };
+                return { fontSizeClass: 'text-[3.5px]', paddingClass: 'p-0.5' };
             }
             // General styling for small preview
             if (lineCount <= 4) return { fontSizeClass: 'text-[7px]', paddingClass: 'p-1' };
             if (lineCount <= 8) return { fontSizeClass: 'text-[6px]', paddingClass: 'p-0.5' };
             if (lineCount <= 12) return { fontSizeClass: 'text-[5px]', paddingClass: 'p-0.5' };
-            return { fontSizeClass: 'text-[4.5px]', paddingClass: 'p-0.5' };
+            if (lineCount <= 18) return { fontSizeClass: 'text-[4.5px]', paddingClass: 'p-0.5' };
+            return { fontSizeClass: 'text-[4px]', paddingClass: 'p-0.5' };
+        }
     }
+    
+    // PDF Mode - Adjusted for more spacing (only when previewSize is not specified)
+    if (isPdfMode) {
+        if (lineCount <= 6) return { fontSizeClass: 'text-[24px]', paddingClass: 'p-4' };
+        if (lineCount <= 12) return { fontSizeClass: 'text-[20px]', paddingClass: 'p-3' };
+        if (lineCount <= 18) return { fontSizeClass: 'text-[18px]', paddingClass: 'p-2' };
+        if (lineCount <= 24) return { fontSizeClass: 'text-[16px]', paddingClass: 'p-2' };
+        if (lineCount <= 30) return { fontSizeClass: 'text-[14px]', paddingClass: 'p-1.5' };
+        return { fontSizeClass: 'text-[12px]', paddingClass: 'p-1' };
+    }
+    
+    // Default fallback (should not normally be reached)
+    return { fontSizeClass: 'text-[13px]', paddingClass: 'p-2' };
 };
 
 
@@ -161,7 +199,7 @@ function MinimalistTemplate(props: InvoicePreviewProps) {
   const primaryColor = templateCustomizations?.primary_color;
   const footerText = getProcessedFooterText(userProfile);
   const fontClass = fontClasses[templateCustomizations?.font || 'mono'];
-  const pagePaddingClass = isPdfMode ? 'p-10' : 'p-4';
+  const pagePaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-6' : 'p-4';
   const hasDiscounts = invoice.lines.some(line => line.discount_percentage && line.discount_percentage > 0);
   
   // Calculate dynamic font sizes for email and date sections
@@ -175,7 +213,7 @@ function MinimalistTemplate(props: InvoicePreviewProps) {
       <div className={`${pagePaddingClass} h-full flex flex-col text-gray-800`}>
         <header className={`flex justify-between items-start pb-4 border-b border-gray-300`}>
           <div className="min-w-0 pr-4">
-            {userProfile.logo_url ? <StorageImage bucket="profile-logos" path={userProfile.logo_url} alt="Logo" className="h-16 max-w-[220px] object-contain"/> : <h1 className="text-[1em] font-bold truncate">{userProfile.name}</h1>}
+            {userProfile.logo_url ? <StorageImage key={userProfile.logo_url} bucket="profile-logos" path={userProfile.logo_url} alt="Logo" className="h-16 max-w-[220px] object-contain"/> : <h1 className="text-[1em] font-bold truncate">{userProfile.name}</h1>}
           </div>
           <div className="text-right flex-shrink-0">
             <h2 className={`text-[1em] font-semibold tracking-wider uppercase`} style={primaryColor ? { color: primaryColor } : {}}>Factuur</h2>
@@ -210,34 +248,35 @@ function MinimalistTemplate(props: InvoicePreviewProps) {
           </div>
         </section>
 
-        <section className="mt-6 flex-grow min-h-0 flex flex-col">
-          <table className="w-full text-left table-fixed">
-            <thead>
-              <tr className={`border-b border-gray-300`}>
-                <th className={`${paddingClass} font-semibold uppercase text-gray-500 text-[0.8em] w-[40%]`}>Omschrijving</th>
-                <th className={`${paddingClass} text-center font-semibold uppercase text-gray-500 text-[0.8em]`}>Aantal</th>
-                <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 text-[0.8em]`}>Prijs</th>
-                {hasDiscounts && <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 text-[0.8em]`}>Korting</th>}
-                <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 text-[0.8em]`}>Totaal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.lines.map((line) => {
-                const lineTotal = line.quantity * line.unit_price;
-                const discountedTotal = lineTotal * (1 - ((line.discount_percentage || 0) / 100));
-                return (
-                  <tr key={line.id} className="border-b border-gray-200">
-                    <td className={`${paddingClass} break-words`}>{line.description || <span className="text-gray-400">...</span>}</td>
-                    <td className={`${paddingClass} text-center`}>{line.quantity}</td>
-                    <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(line.unit_price)}>{formatCurrency(line.unit_price)}</span></td>
-                    {hasDiscounts && <td className={`${paddingClass} text-right`}>{line.discount_percentage ? `${line.discount_percentage}%` : '-'}</td>}
-                    <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(discountedTotal)}>{formatCurrency(discountedTotal)}</span></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <div className="flex-grow"></div>
+        <section className="mt-6 flex-grow min-h-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <table className="w-full text-left table-fixed">
+              <thead className="sticky top-0 bg-white z-10">
+                <tr className={`border-b border-gray-300`}>
+                  <th className={`${paddingClass} font-semibold uppercase text-gray-500 text-[0.8em] w-[40%]`}>Omschrijving</th>
+                  <th className={`${paddingClass} text-center font-semibold uppercase text-gray-500 text-[0.8em]`}>Aantal</th>
+                  <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 text-[0.8em]`}>Prijs</th>
+                  {hasDiscounts && <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 text-[0.8em]`}>Korting</th>}
+                  <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 text-[0.8em]`}>Totaal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoice.lines.map((line) => {
+                  const lineTotal = line.quantity * line.unit_price;
+                  const discountedTotal = lineTotal * (1 - ((line.discount_percentage || 0) / 100));
+                  return (
+                    <tr key={line.id} className="border-b border-gray-200">
+                      <td className={`${paddingClass} break-words`}>{line.description || <span className="text-gray-400">...</span>}</td>
+                      <td className={`${paddingClass} text-center`}>{line.quantity}</td>
+                      <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(line.unit_price)}>{formatCurrency(line.unit_price)}</span></td>
+                      {hasDiscounts && <td className={`${paddingClass} text-right`}>{line.discount_percentage ? `${line.discount_percentage}%` : '-'}</td>}
+                      <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(discountedTotal)}>{formatCurrency(discountedTotal)}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <div className="mt-auto flex-shrink-0">
@@ -280,7 +319,7 @@ function CorporateTemplate(props: InvoicePreviewProps) {
   const primaryColor = templateCustomizations?.primary_color || '#4b5563';
   const footerText = getProcessedFooterText(userProfile);
   const fontClass = fontClasses[templateCustomizations?.font || 'sans'];
-  const pagePaddingClass = isPdfMode ? 'p-10' : 'p-4';
+  const pagePaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-6' : 'p-4';
   const hasDiscounts = invoice.lines.some(line => line.discount_percentage && line.discount_percentage > 0);
   
   // Calculate dynamic font sizes for email and date sections
@@ -295,7 +334,7 @@ function CorporateTemplate(props: InvoicePreviewProps) {
         <header>
             <div className="flex justify-between items-center bg-gray-100 p-4">
               <div className="min-w-0 pr-4">
-                {userProfile.logo_url ? <StorageImage bucket="profile-logos" path={userProfile.logo_url} alt="Logo" className="h-20 max-w-[250px] object-contain"/> : <h1 className="text-[1.25em] font-bold truncate">{userProfile.name}</h1>}
+                {userProfile.logo_url ? <StorageImage key={userProfile.logo_url} bucket="profile-logos" path={userProfile.logo_url} alt="Logo" className="h-20 max-w-[250px] object-contain"/> : <h1 className="text-[1.25em] font-bold truncate">{userProfile.name}</h1>}
               </div>
               <div className="text-right flex-shrink-0">
                 <h2 className="text-[1.75em] font-bold uppercase tracking-wider" style={{ color: primaryColor }}>Factuur</h2>
@@ -327,35 +366,36 @@ function CorporateTemplate(props: InvoicePreviewProps) {
           </div>
         </section>
 
-        <section className="mt-6 flex-grow min-h-0 flex flex-col">
-          <table className="w-full text-left">
-            <thead>
-              <tr style={{ backgroundColor: primaryColor }} className="text-white">
-                <th className={`${paddingClass} font-bold uppercase text-[0.8em] w-[8%]`}>#</th>
-                <th className={`${paddingClass} font-bold uppercase text-[0.8em] w-[40%]`}>Omschrijving</th>
-                <th className={`${paddingClass} text-right font-bold uppercase text-[0.8em]`}>Prijs</th>
-                <th className={`${paddingClass} text-center font-bold uppercase text-[0.8em]`}>Aantal</th>
-                {hasDiscounts && <th className={`${paddingClass} text-center font-bold uppercase text-[0.8em]`}>Korting</th>}
-                <th className={`${paddingClass} text-right font-bold uppercase text-[0.8em]`}>Totaal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.lines.map((line, index) => {
-                const discountedTotal = (line.quantity * line.unit_price) * (1 - ((line.discount_percentage || 0) / 100));
-                return (
-                  <tr key={line.id} className={index % 2 === 0 ? 'bg-gray-100' : 'bg-white'}>
-                    <td className={paddingClass}>0{index + 1}</td>
-                    <td className={`${paddingClass} break-words`}>{line.description || '...'}</td>
-                    <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(line.unit_price)}>{formatCurrency(line.unit_price)}</span></td>
-                    <td className={`${paddingClass} text-center`}>{line.quantity}</td>
-                    {hasDiscounts && <td className={`${paddingClass} text-center`}>{line.discount_percentage ? `${line.discount_percentage}%` : '-'}</td>}
-                    <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(discountedTotal)}>{formatCurrency(discountedTotal)}</span></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <div className="flex-grow"></div>
+        <section className="mt-6 flex-grow min-h-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <table className="w-full text-left">
+              <thead className="sticky top-0 z-10" style={{ backgroundColor: primaryColor }}>
+                <tr className="text-white">
+                  <th className={`${paddingClass} font-bold uppercase text-[0.8em] w-[8%]`}>#</th>
+                  <th className={`${paddingClass} font-bold uppercase text-[0.8em] w-[40%]`}>Omschrijving</th>
+                  <th className={`${paddingClass} text-right font-bold uppercase text-[0.8em]`}>Prijs</th>
+                  <th className={`${paddingClass} text-center font-bold uppercase text-[0.8em]`}>Aantal</th>
+                  {hasDiscounts && <th className={`${paddingClass} text-center font-bold uppercase text-[0.8em]`}>Korting</th>}
+                  <th className={`${paddingClass} text-right font-bold uppercase text-[0.8em]`}>Totaal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoice.lines.map((line, index) => {
+                  const discountedTotal = (line.quantity * line.unit_price) * (1 - ((line.discount_percentage || 0) / 100));
+                  return (
+                    <tr key={line.id} className={index % 2 === 0 ? 'bg-gray-100' : 'bg-white'}>
+                      <td className={paddingClass}>0{index + 1}</td>
+                      <td className={`${paddingClass} break-words`}>{line.description || '...'}</td>
+                      <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(line.unit_price)}>{formatCurrency(line.unit_price)}</span></td>
+                      <td className={`${paddingClass} text-center`}>{line.quantity}</td>
+                      {hasDiscounts && <td className={`${paddingClass} text-center`}>{line.discount_percentage ? `${line.discount_percentage}%` : '-'}</td>}
+                      <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(discountedTotal)}>{formatCurrency(discountedTotal)}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </section>
         
         <div className="mt-auto flex-shrink-0">
@@ -395,7 +435,7 @@ function CreativeTemplate(props: InvoicePreviewProps) {
     const primaryColor = templateCustomizations?.primary_color || '#2d3748';
     const footerText = getProcessedFooterText(userProfile);
     const fontClass = fontClasses[templateCustomizations?.font || 'sans'];
-    const pagePaddingClass = isPdfMode ? 'p-10' : 'p-6';
+    const pagePaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-8' : 'p-6';
     const hasDiscounts = invoice.lines.some(line => line.discount_percentage && line.discount_percentage > 0);
 
     // Calculate dynamic font sizes for email and date sections
@@ -410,7 +450,7 @@ function CreativeTemplate(props: InvoicePreviewProps) {
         <header className={`text-white ${pagePaddingClass} flex justify-between items-start`} style={{ backgroundColor: primaryColor }}>
             <div className="min-w-0 pr-4">
                 {userProfile.logo_url 
-                    ? <div className="w-24 h-24 bg-white rounded-md flex items-center justify-center p-1 shadow-sm"><StorageImage bucket="profile-logos" path={userProfile.logo_url} alt="Logo" className="max-h-full max-w-full object-contain"/></div>
+                    ? <div className="w-24 h-24 bg-white rounded-md flex items-center justify-center p-1 shadow-sm"><StorageImage key={userProfile.logo_url} bucket="profile-logos" path={userProfile.logo_url} alt="Logo" className="max-h-full max-w-full object-contain"/></div>
                     : <h1 className="text-[1.25em] font-bold truncate">{userProfile.name}</h1>
                 }
             </div>
@@ -441,10 +481,11 @@ function CreativeTemplate(props: InvoicePreviewProps) {
                 </div>
             </section>
 
-            <section className="mt-8 flex-grow flex flex-col">
+            <section className="mt-8 flex-grow min-h-0 flex flex-col overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto">
                  <table className="w-full text-left">
-                  <thead>
-                    <tr style={{ backgroundColor: primaryColor }} className="text-white">
+                  <thead className="sticky top-0 z-10" style={{ backgroundColor: primaryColor }}>
+                    <tr className="text-white">
                       <th className={`${paddingClass} font-bold rounded-tl-lg w-[40%]`}>Omschrijving</th>
                       <th className={`${paddingClass} text-right font-bold`}>Prijs</th>
                       <th className={`${paddingClass} text-center font-bold`}>Aantal</th>
@@ -467,7 +508,7 @@ function CreativeTemplate(props: InvoicePreviewProps) {
                     })}
                   </tbody>
                 </table>
-                <div className="flex-grow"></div>
+              </div>
             </section>
             
             <div className="mt-auto flex-shrink-0">
@@ -499,7 +540,7 @@ function SidebarTemplate(props: InvoicePreviewProps) {
   const { customer } = invoice;
   const { fontSizeClass, paddingClass } = getDynamicStyling(invoice.lines.length, props.templateStyle || 'sidebar', isPdfMode, previewSize);
   const footerText = getProcessedFooterText(userProfile);
-  const pagePaddingClass = isPdfMode ? 'p-10' : 'p-4';
+  const pagePaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-6' : 'p-4';
   const hasDiscounts = invoice.lines.some(line => line.discount_percentage && line.discount_percentage > 0);
   const fontClass = fontClasses[templateCustomizations?.font || 'sans'];
 
@@ -517,7 +558,7 @@ function SidebarTemplate(props: InvoicePreviewProps) {
           <div className="mb-6">
             {userProfile.logo_url ? (
                 <div className="w-28 h-28 bg-white rounded-md flex items-center justify-center p-1 shadow-sm">
-                    <StorageImage bucket="profile-logos" path={userProfile.logo_url} alt="Logo" className="max-h-full max-w-full object-contain"/>
+                    <StorageImage key={userProfile.logo_url} bucket="profile-logos" path={userProfile.logo_url} alt="Logo" className="max-h-full max-w-full object-contain"/>
                 </div>
             ) : (
                 <h1 className="text-[1em] font-bold break-words">{userProfile.name}</h1>
@@ -562,9 +603,10 @@ function SidebarTemplate(props: InvoicePreviewProps) {
           </div>
         </header>
 
-        <section className="flex-grow min-h-0 flex flex-col">
+        <section className="flex-grow min-h-0 flex flex-col overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-y-auto">
             <table className="w-full text-left table-fixed">
-                <thead>
+                <thead className="sticky top-0 bg-white z-10">
                 <tr className="border-b border-gray-300">
                     <th className={`${paddingClass} font-semibold uppercase text-gray-500 ${hasDiscounts ? 'w-[40%]' : 'w-[50%]'}`}>Omschrijving</th>
                     <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 w-[20%]`}>Prijs</th>
@@ -588,7 +630,7 @@ function SidebarTemplate(props: InvoicePreviewProps) {
                 })}
                 </tbody>
             </table>
-            <div className="flex-grow"></div>
+            </div>
         </section>
         <div className="mt-auto flex-shrink-0">
             <div className="flex justify-end">
@@ -627,7 +669,7 @@ function ElegantTemplate(props: InvoicePreviewProps) {
     const primaryColor = templateCustomizations?.primary_color || '#333333';
     const footerText = getProcessedFooterText(userProfile);
     const fontClass = fontClasses[templateCustomizations?.font || 'serif'];
-    const pagePaddingClass = isPdfMode ? 'p-10' : 'p-6';
+    const pagePaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-8' : 'p-6';
     const hasDiscounts = invoice.lines.some(line => line.discount_percentage && line.discount_percentage > 0);
   
   // Calculate dynamic font sizes for email and date sections
@@ -641,7 +683,7 @@ function ElegantTemplate(props: InvoicePreviewProps) {
         <div className={`h-full flex flex-col text-gray-800 ${pagePaddingClass} border-4 border-gray-200`}>
             <header className="pb-4 border-b flex items-start">
                 {userProfile.logo_url ? (
-                  <StorageImage bucket="profile-logos" path={userProfile.logo_url} alt="Logo" className="h-20 max-w-[250px] object-contain" />
+                  <StorageImage key={userProfile.logo_url} bucket="profile-logos" path={userProfile.logo_url} alt="Logo" className="h-20 max-w-[250px] object-contain" />
                 ) : (
                   <h1 className="text-[1.5em] font-bold tracking-widest break-words">{userProfile.name}</h1>
                 )}
@@ -671,9 +713,10 @@ function ElegantTemplate(props: InvoicePreviewProps) {
                 </div>
             </section>
 
-            <section className="mt-6 flex-grow flex flex-col">
+            <section className="mt-6 flex-grow min-h-0 flex flex-col overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto">
                 <table className="w-full text-left">
-                  <thead>
+                  <thead className="sticky top-0 bg-white z-10">
                     <tr className="border-b-2">
                       <th className={`${paddingClass} font-semibold uppercase text-[0.8em] w-[40%]`}>Item Omschrijving</th>
                       <th className={`${paddingClass} text-center font-semibold uppercase text-[0.8em]`}>Aantal</th>
@@ -697,7 +740,7 @@ function ElegantTemplate(props: InvoicePreviewProps) {
                     })}
                   </tbody>
                 </table>
-                <div className="flex-grow"></div>
+              </div>
             </section>
             
             <div className="mt-auto pt-4">
@@ -731,8 +774,8 @@ function WaveTemplate(props: InvoicePreviewProps) {
     const primaryColor = templateCustomizations?.primary_color || '#2563eb';
     const footerText = getProcessedFooterText(userProfile);
     const fontClass = fontClasses[templateCustomizations?.font || 'sans'];
-    const pageHeaderMainPaddingClass = isPdfMode ? 'p-10' : 'p-6';
-    const footerPaddingClass = isPdfMode ? 'p-10' : 'p-4';
+    const pageHeaderMainPaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-8' : 'p-6';
+    const footerPaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-6' : 'p-4';
     const hasDiscounts = invoice.lines.some(line => line.discount_percentage && line.discount_percentage > 0);
     
     // Calculate dynamic font sizes for email and date sections
@@ -748,7 +791,7 @@ function WaveTemplate(props: InvoicePreviewProps) {
                 <div className="min-w-0 pr-4">
                     {userProfile.logo_url ? (
                         <div className="w-24 h-24 bg-white rounded-md flex items-center justify-center p-1 shadow-sm">
-                            <StorageImage bucket="profile-logos" path={userProfile.logo_url} alt="Logo" className="max-h-full max-w-full object-contain"/>
+                            <StorageImage key={userProfile.logo_url} bucket="profile-logos" path={userProfile.logo_url} alt="Logo" className="max-h-full max-w-full object-contain"/>
                         </div>
                     ) : (
                         <h1 className="text-[1.25em] font-bold truncate">{userProfile.name}</h1>
@@ -785,9 +828,10 @@ function WaveTemplate(props: InvoicePreviewProps) {
                 </div>
             </section>
             
-            <section className="mt-6 flex-grow flex flex-col">
+            <section className="mt-6 flex-grow min-h-0 flex flex-col overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto">
                  <table className="w-full text-left">
-                    <thead style={{ color: primaryColor }}>
+                    <thead className="sticky top-0 bg-white z-10" style={{ color: primaryColor }}>
                         <tr className="border-b-2" style={{ borderColor: primaryColor }}>
                           <th className={`${paddingClass} font-bold w-[8%]`}>Nr.</th>
                           <th className={`${paddingClass} font-bold w-[40%]`}>Omschrijving</th>
@@ -813,7 +857,7 @@ function WaveTemplate(props: InvoicePreviewProps) {
                         })}
                     </tbody>
                 </table>
-                <div className="flex-grow"></div>
+              </div>
             </section>
 
             <div className="mt-auto flex-shrink-0">

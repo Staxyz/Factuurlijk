@@ -3,6 +3,7 @@ export type View =
   | 'landing'
   | 'login'
   | 'signup'
+  | 'reset-password'
   | 'dashboard'
   | 'invoices'
   | 'new-invoice'
@@ -18,7 +19,8 @@ export type View =
   | 'help'
   | 'privacy-policy'
   | 'terms-and-conditions'
-  | 'contact';
+  | 'contact'
+  | 'checkout-success';
 
 // Represents a customer, typically stored in the 'customers' table
 export interface Customer {

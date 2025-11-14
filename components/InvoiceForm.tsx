@@ -102,7 +102,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
   
   const [totalAmount, setTotalAmount] = useState(0);
   const [isOverLimit, setIsOverLimit] = useState(false);
-  const MAX_INVOICE_TOTAL = 10_000_000;
+  const MAX_INVOICE_TOTAL = 999_999_999; // Maximaal 9 cijfers
 
   // This useEffect is now ONLY for handling a switch from one invoice to another
   // (e.g., from 'new' to 'edit') while the component is already mounted.
@@ -152,9 +152,26 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
         const isNumericField = field === 'quantity' || field === 'unit_price' || field === 'discount_percentage';
         
         if (isNumericField) {
-            return { ...line, [field]: parseFloat(value) || 0 };
+            // Remove any non-numeric characters except decimal point
+            const numericValue = value.replace(/[^\d.]/g, '');
+            
+            // For unit_price, validate maximum 9 digits (excluding decimal point)
+            if (field === 'unit_price') {
+                // Count digits (excluding decimal point)
+                const digitCount = numericValue.replace(/\./g, '').length;
+                if (digitCount > 9) {
+                    // If more than 9 digits, truncate to 9 digits
+                    const parts = numericValue.split('.');
+                    const integerPart = parts[0].slice(0, 9);
+                    const decimalPart = parts[1] || '';
+                    const truncatedValue = decimalPart ? `${integerPart}.${decimalPart}` : integerPart;
+                    return { ...line, [field]: parseFloat(truncatedValue) || 0 };
+                }
+            }
+            
+            return { ...line, [field]: parseFloat(numericValue) || 0 };
         } else { // This block handles 'description'
-            return { ...line, [field]: value.slice(0, 12) };
+            return { ...line, [field]: value.slice(0, 30) };
         }
       }),
     }));
@@ -354,7 +371,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
                         <div key={line.id} className="grid grid-cols-1 md:grid-cols-12 gap-x-3 gap-y-2 items-end">
                             <div className="col-span-12 md:col-span-4">
                                 {index === 0 && <label className="block text-xs font-medium text-zinc-500 mb-1">Omschrijving</label>}
-                                <input type="text" placeholder="Dienst of product" value={line.description} onChange={(e) => handleLineChange(line.id, 'description', e.target.value)} className={inputStyle} required maxLength={12} />
+                                <input type="text" placeholder="Dienst of product" value={line.description} onChange={(e) => handleLineChange(line.id, 'description', e.target.value)} className={inputStyle} required maxLength={30} />
                             </div>
                             <div className="col-span-4 md:col-span-2">
                                 {index === 0 && <label className="block text-xs font-medium text-zinc-500 mb-1">Aantal</label>}

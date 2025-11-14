@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { View, UserProfile } from '../types';
 import type { Session } from '@supabase/supabase-js';
+import { initiateCheckout } from '../services/stripeService';
 
 interface UpgradePageProps {
     setCurrentView: (view: View) => void;
@@ -16,9 +17,40 @@ const CheckIcon: React.FC = () => (
 
 export const UpgradePage: React.FC<UpgradePageProps> = ({ setCurrentView, session, userProfile, onUpgrade }) => {
     const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const userName = session?.user?.user_metadata?.full_name || userProfile.name;
     const userEmail = session?.user?.email || userProfile.email;
     const isPro = userProfile.plan === 'pro';
+
+    const handleCheckout = async () => {
+        if (!userEmail) {
+            setError('Email address not found');
+            return;
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const priceId = billingCycle === 'monthly'
+                ? import.meta.env.VITE_STRIPE_PRICE_ID_MONTHLY
+                : import.meta.env.VITE_STRIPE_PRICE_ID_YEARLY;
+
+            if (!priceId) {
+                throw new Error('Stripe configuration missing');
+            }
+
+            const successUrl = `${window.location.origin}/checkout-success`;
+            const cancelUrl = `${window.location.origin}/upgrade`;
+
+            await initiateCheckout(priceId, userEmail, successUrl, cancelUrl);
+        } catch (err) {
+            console.error('Checkout error:', err);
+            setError(err instanceof Error ? err.message : 'Failed to start checkout');
+            setIsLoading(false);
+        }
+    };
 
     return (
         <div>
@@ -102,12 +134,20 @@ export const UpgradePage: React.FC<UpgradePageProps> = ({ setCurrentView, sessio
                                 <p className="text-sm text-zinc-600 truncate">{userEmail}</p>
                             </div>
                         ) : (
-                             <button 
-                                onClick={onUpgrade}
-                                className="bg-teal-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-teal-700 transition-colors w-full shadow-sm"
-                            >
-                                Upgrade naar Pro
-                            </button>
+                            <>
+                                {error && (
+                                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg mb-4 text-sm">
+                                        {error}
+                                    </div>
+                                )}
+                                <button 
+                                    onClick={handleCheckout}
+                                    disabled={isLoading}
+                                    className="bg-teal-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-teal-700 transition-colors w-full shadow-sm disabled:bg-teal-400 disabled:cursor-not-allowed"
+                                >
+                                    {isLoading ? 'Aan het laden...' : 'Upgrade naar Pro'}
+                                </button>
+                            </>
                         )}
                     </div>
                 </div>

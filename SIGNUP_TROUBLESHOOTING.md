@@ -116,3 +116,6 @@ De applicatie logt nu uitgebreide informatie:
 - [ ] Browser console toont geen errors
 - [ ] Profiel wordt automatisch aangemaakt (check in database)
 
+
+
+

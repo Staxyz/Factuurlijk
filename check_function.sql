@@ -18,3 +18,6 @@ JOIN pg_namespace n ON p.pronamespace = n.oid
 WHERE n.nspname = 'public' 
     AND p.proname = 'handle_new_user';
 
+
+
+

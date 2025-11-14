@@ -27,45 +27,64 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ userProfile, set
     setProfile(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleFileChange = async (file: File | null) => {
-    if (!file || !session?.user) return;
+  const handleFileChange = useCallback(async (file: File | null) => {
+    if (!file || !session?.user) {
+      console.warn('No file or session for logo upload');
+      return;
+    }
+    
     if (!file.type.startsWith('image/')) {
         alert('Selecteer a.u.b. een afbeeldingsbestand.');
         return;
     }
 
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+        alert('Het bestand is te groot. Maximaal 5MB toegestaan.');
+        return;
+    }
+
+    const readFileAsDataUrl = (fileToRead: File) =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error ?? new Error('Kon logo niet inladen.'));
+        reader.readAsDataURL(fileToRead);
+      });
+
     setIsUploadingLogo(true);
     try {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}.${fileExt}`;
-        const filePath = `${session.user.id}/${fileName}`;
-        
-        // Remove old logo from storage if it exists to prevent orphaned files
-        if (profile.logo_url) {
-            const { error: removeError } = await supabase.storage
-                .from('profile-logos')
-                .remove([profile.logo_url]);
-            if (removeError) {
-                console.error("Could not remove old logo:", removeError.message);
-            }
+        const dataUrl = await readFileAsDataUrl(file);
+
+        // Update local state immediately so the user sees the preview
+        setProfile(prev => ({ ...prev, logo_url: dataUrl }));
+
+        // Save in database so other sessions/devices can see the logo as well
+        console.log('Saving inline logo data to profile');
+        const { data: updateData, error: updateError } = await supabase
+            .from('profiles')
+            .update({ 
+                logo_url: dataUrl,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', session.user.id)
+            .select()
+            .single();
+
+        if (updateError) {
+            console.error('Error updating logo in database:', updateError);
+            throw updateError;
         }
 
-        const { error: uploadError } = await supabase.storage
-            .from('profile-logos')
-            .upload(filePath, file, { upsert: false });
-
-        if (uploadError) throw uploadError;
-
-        // Update local state with the new file path. This will be saved on submit.
-        setProfile(prev => ({ ...prev, logo_url: filePath }));
-
+        console.log('Logo saved successfully in profile record');
+        setUserProfile(prev => ({ ...prev, logo_url: dataUrl }));
     } catch (error: any) {
-        console.error('Error uploading logo:', error);
-        alert(`Er is een fout opgetreden bij het uploaden van het logo: ${error.message}`);
+        console.error('Unexpected error uploading logo:', error);
+        alert(`Er is een onverwachte fout opgetreden bij het uploaden van het logo: ${error.message || 'Onbekende fout'}`);
     } finally {
         setIsUploadingLogo(false);
     }
-  };
+  }, [session?.user?.id, setUserProfile]);
 
   const onDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
@@ -84,8 +103,10 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ userProfile, set
       e.stopPropagation();
       setIsDragging(false);
       const file = e.dataTransfer.files[0];
-      if (file) handleFileChange(file);
-  }, []);
+      if (file) {
+          handleFileChange(file);
+      }
+  }, [handleFileChange]);
   
   const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -96,14 +117,24 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ userProfile, set
     if (!session?.user || !profile.logo_url) return;
 
     try {
-        const { error } = await supabase.storage
-            .from('profile-logos')
-            .remove([profile.logo_url]);
-        if (error) throw error;
+        const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ 
+                logo_url: null,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', session.user.id);
         
-        setProfile(prev => ({...prev, logo_url: ''}));
+        if (updateError) {
+            console.error('Error updating database:', updateError);
+            throw updateError;
+        }
+        
+        // Update local and global state
+        setProfile(prev => ({...prev, logo_url: null}));
+        setUserProfile(prev => ({...prev, logo_url: null}));
     } catch (error: any) {
-        console.error('Error removing logo from storage:', error);
+        console.error('Error removing logo:', error);
         alert(`Fout bij verwijderen logo: ${error.message}`);
     }
   };
@@ -115,13 +146,22 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ userProfile, set
       return;
     }
 
+    if (isUploadingLogo) {
+      alert("Wacht tot het logo is geüpload voordat u het profiel opslaat.");
+      return;
+    }
+
     setIsSaving(true);
     setShowSuccess(false);
 
     try {
+      console.log('Saving profile:', profile);
+      
       // Create a clean payload for the update operation.
       // We exclude fields that should not be changed, like 'id' and 'email'.
       const { id, email, updated_at, ...updatePayload } = profile;
+
+      console.log('Update payload:', updatePayload);
 
       const { data, error } = await supabase
         .from('profiles')
@@ -134,9 +174,20 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ userProfile, set
         .single();
 
       if (error) {
+        console.error("Supabase error details:", error);
+        let errorMessage = `Er is een fout opgetreden bij het opslaan van het profiel: ${error.message}`;
+        
+        if (error.message.includes('row-level security') || error.message.includes('RLS')) {
+          errorMessage = 'U heeft geen toestemming om dit profiel bij te werken. Controleer de database policies.';
+        } else if (error.message.includes('not found') || error.code === 'PGRST116') {
+          errorMessage = 'Profiel niet gevonden. Probeer de pagina te verversen.';
+        }
+        
+        alert(errorMessage);
         throw error;
       }
 
+      console.log('Profile saved successfully:', data);
       setUserProfile(data); // Update global state with data from DB
       setProfile(data); // Sync local form state to prevent false "hasChanges"
       setShowSuccess(true);
@@ -144,7 +195,7 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ userProfile, set
 
     } catch (error: any) {
       console.error("Error updating profile:", error);
-      alert(`Er is een fout opgetreden bij het opslaan van het profiel: ${error.message}`);
+      // Error message already shown in the try block
     } finally {
       setIsSaving(false);
     }
@@ -166,6 +217,7 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ userProfile, set
                         {profile.logo_url ? (
                             <div className="relative group">
                                 <StorageImage 
+                                    key={profile.logo_url} 
                                     bucket="profile-logos" 
                                     path={profile.logo_url} 
                                     alt="Logo preview" 

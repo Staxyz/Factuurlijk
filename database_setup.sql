@@ -184,3 +184,6 @@ CREATE TRIGGER set_updated_at
 -- Nu wordt automatisch een profiel aangemaakt voor elke nieuwe gebruiker
 -- die zich registreert via email/password of Google OAuth.
 
+
+
+

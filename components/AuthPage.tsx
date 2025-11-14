@@ -30,29 +30,40 @@ export const AuthPage: React.FC<AuthPageProps> = ({ view, onSwitchView, onBackTo
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
 
   const handleAuthAction = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Don't submit login form if forgot password is showing
+    if (isLogin && showForgotPassword) {
+      return;
+    }
+    
     setLoading(true);
     setError(null);
 
     try {
-      if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (isLogin) {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) {
           setError(error.message);
         }
         // On success, the onAuthStateChange listener in App.tsx will handle navigation.
-      } else {
+    } else {
         // Sign up
+        // Determine the correct redirect URL based on environment
+        const redirectUrl = `${window.location.origin}/auth/confirm`;
+        
         const { data, error } = await supabase.auth.signUp({ 
-          email, 
-          password, 
+        email, 
+        password, 
           options: { 
             data: { full_name: name },
-            emailRedirectTo: window.location.origin
+            emailRedirectTo: redirectUrl
           } 
-        });
+      });
         
         if (error) {
           console.error('=== SIGNUP ERROR DETAILS ===');
@@ -73,7 +84,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ view, onSwitchView, onBackTo
             setError('Database fout. Controleer of de database correct is ingesteld. Check de console voor details.');
           } else {
             setError(error.message || 'Er is een fout opgetreden bij het aanmaken van je account. Check de console (F12) voor details.');
-          }
+    } 
         } else if (data.user) {
           // Check if email confirmation is required
           if (data.session) {
@@ -97,6 +108,38 @@ export const AuthPage: React.FC<AuthPageProps> = ({ view, onSwitchView, onBackTo
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    if (!email) {
+      setError('Vul je e-mailadres in.');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const redirectUrl = `${window.location.origin}/auth/reset-password`;
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl,
+      });
+
+      if (error) {
+        console.error('Password reset error:', error);
+        setError(error.message || 'Er is een fout opgetreden. Probeer het opnieuw.');
+      } else {
+        setResetEmailSent(true);
+      }
+    } catch (err) {
+      console.error('Unexpected error during password reset:', err);
+      setError('Er is een onverwachte fout opgetreden. Probeer het opnieuw.');
+    } finally {
+    setLoading(false);
+    }
+  };
+
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
@@ -113,14 +156,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ view, onSwitchView, onBackTo
       console.log('===============================');
       
       const { data, error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
+        provider: 'google',
           options: {
               redirectTo: redirectUrl,
               skipBrowserRedirect: false,
           },
-      });
+    });
       
-      if (error) {
+    if (error) {
           console.error('Google OAuth error:', error);
           console.error('Error details:', JSON.stringify(error, null, 2));
           setError(error.message || 'Er is een fout opgetreden bij het inloggen met Google. Controleer je Supabase configuratie.');
@@ -134,7 +177,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ view, onSwitchView, onBackTo
     } catch (err) {
       console.error('Unexpected error during Google OAuth:', err);
       setError('Er is een onverwachte fout opgetreden. Probeer het opnieuw.');
-      setLoading(false);
+        setLoading(false);
     }
   };
 
@@ -210,6 +253,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ view, onSwitchView, onBackTo
               </div>
             </div>
 
+            {!showForgotPassword && (
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-zinc-700">
                 Wachtwoord
@@ -218,17 +262,109 @@ export const AuthPage: React.FC<AuthPageProps> = ({ view, onSwitchView, onBackTo
                 <input id="password" name="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} className={inputStyle} disabled={loading}/>
               </div>
             </div>
+            )}
             
-            {isLogin && (
+            {isLogin && !showForgotPassword && (
                 <div className="flex items-center justify-between">
                     <div className="text-sm">
-                        <a href="#" className="font-medium text-teal-600 hover:text-teal-500">
+                        <button
+                            type="button"
+                            onClick={() => {
+                              setShowForgotPassword(true);
+                              setPassword(''); // Clear password when switching to forgot password
+                            }}
+                            className="font-medium text-teal-600 hover:text-teal-500"
+                        >
                             Wachtwoord vergeten?
-                        </a>
+                        </button>
                     </div>
                 </div>
             )}
 
+            {isLogin && showForgotPassword && !resetEmailSent && (
+                <div className="space-y-4">
+                    <div className="text-sm text-zinc-600">
+                        <p>Vul je e-mailadres in en we sturen je een link om je wachtwoord te resetten.</p>
+                    </div>
+                    <form onSubmit={handleForgotPassword} className="space-y-4">
+                        <div>
+                            <label htmlFor="reset-email" className="block text-sm font-medium text-zinc-700">
+                                E-mailadres
+                            </label>
+                            <div className="mt-1">
+                                <input
+                                    id="reset-email"
+                                    name="reset-email"
+                                    type="email"
+                                    autoComplete="email"
+                                    required
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className={inputStyle}
+                                    disabled={loading}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex space-x-3">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowForgotPassword(false);
+                                    setEmail('');
+                                    setError(null);
+                                }}
+                                disabled={loading}
+                                className="flex-1 py-2 px-4 border border-stone-300 rounded-md shadow-sm text-sm font-medium text-zinc-700 bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50"
+                            >
+                                Annuleren
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="flex-1 flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50"
+                            >
+                                {loading ? 'Bezig...' : 'Verstuur link'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {isLogin && showForgotPassword && resetEmailSent && (
+                <div className="space-y-4">
+                    <div className="rounded-md bg-green-50 p-4">
+                        <div className="flex">
+                            <div className="flex-shrink-0">
+                                <svg className="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <div className="ml-3">
+                                <h3 className="text-sm font-medium text-green-800">
+                                    Email verzonden!
+                                </h3>
+                                <div className="mt-2 text-sm text-green-700">
+                                    <p>We hebben een wachtwoord reset link gestuurd naar <strong>{email}</strong>. Check je inbox en klik op de link om je wachtwoord te resetten.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setShowForgotPassword(false);
+                            setResetEmailSent(false);
+                            setEmail('');
+                            setError(null);
+                        }}
+                        className="w-full py-2 px-4 border border-stone-300 rounded-md shadow-sm text-sm font-medium text-zinc-700 bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+                    >
+                        Terug naar inloggen
+                    </button>
+                </div>
+            )}
+
+            {!showForgotPassword && (
             <div>
               <button
                 type="submit"
@@ -238,6 +374,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ view, onSwitchView, onBackTo
                 {loading ? 'Bezig...' : (isLogin ? 'Inloggen' : 'Registreren')}
               </button>
             </div>
+            )}
           </form>
         </div>
       </div>

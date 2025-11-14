@@ -77,3 +77,6 @@ Na signup:
    - Voer COMPLETE_DATABASE_SETUP.sql opnieuw uit
    - Test opnieuw
 
+
+
+

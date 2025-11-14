@@ -98,3 +98,6 @@ LIMIT 5;
 -- 7. set_updated_at trigger moet bestaan op public.profiles
 -- 8. Recente profielen moeten zichtbaar zijn
 
+
+
+

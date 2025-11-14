@@ -200,3 +200,6 @@ Als het probleem blijft bestaan:
 - [ ] Tabel structuur klopt
 - [ ] Test user aangemaakt en profiel gecontroleerd
 
+
+
+

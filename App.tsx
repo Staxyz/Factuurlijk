@@ -22,30 +22,55 @@ import { HelpPage } from './components/HelpPage';
 import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
 import { TermsAndConditionsPage } from './components/TermsAndConditionsPage';
 import { ContactPage } from './components/ContactPage';
+import { ResetPasswordPage } from './components/ResetPasswordPage';
+import { CheckoutSuccessPage } from './components/CheckoutSuccessPage';
 
-// A more robust error message extractor
+// Secure error message extractor - prevents leaking sensitive information
 const getErrorMessage = (error: unknown, defaultMessage = 'Er is een onbekende fout opgetreden.'): string => {
-    if (error instanceof Error) {
-        return error.message;
+    // In production, never expose detailed error information
+    // Check if we're in production mode
+    const isProduction = (import.meta as any).env?.MODE === 'production' || (import.meta as any).env?.PROD === true;
+    if (isProduction) {
+        return defaultMessage;
     }
+    
+    // In development, show more details for debugging
+    if (error instanceof Error) {
+        const message = error.message;
+        
+        // Don't expose API keys, tokens, or internal paths
+        if (
+            message.includes('API_KEY') ||
+            message.includes('SECRET') ||
+            message.includes('TOKEN') ||
+            message.includes('PASSWORD') ||
+            message.includes('supabase') ||
+            message.includes('localhost')
+        ) {
+            return defaultMessage;
+        }
+        
+        return message;
+    }
+    
     if (typeof error === 'object' && error !== null) {
         if ('message' in error && typeof (error as any).message === 'string') {
-            return (error as any).message;
+            const msg = (error as any).message;
+            // Check for sensitive information
+            if (msg.includes('API_KEY') || msg.includes('SECRET') || msg.includes('TOKEN')) {
+                return defaultMessage;
+            }
+            return msg;
         }
         if ('details' in error && typeof (error as any).details === 'string') {
             return (error as any).details;
         }
-        // As a fallback for unknown object structures
-        try {
-            const stringified = JSON.stringify(error);
-            if (stringified !== '{}' && stringified !== '[]') return stringified;
-        } catch {
-            // ignore stringify errors
-        }
     }
+    
     if (typeof error === 'string' && error.length > 0) {
         return error;
     }
+    
     return defaultMessage;
 };
 
@@ -54,6 +79,7 @@ const App: React.FC = () => {
   // Authentication state
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [waitingForOAuth, setWaitingForOAuth] = useState(false); // Track if we're waiting for OAuth callback
 
   // App view state
   const [view, setView] = useState<View>('dashboard'); // Will be overwritten by auth check
@@ -221,9 +247,9 @@ const App: React.FC = () => {
     }
   }, [createUserProfile]);
 
-  // Handle OAuth callback from hash fragments or query parameters
+  // Handle OAuth callback and email confirmation from hash fragments or query parameters
   useEffect(() => {
-    // Check if we're returning from an OAuth redirect
+    // Check if we're returning from an OAuth redirect or email confirmation
     // Supabase can use either hash fragments (#) or query parameters (?)
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const queryParams = new URLSearchParams(window.location.search);
@@ -231,8 +257,55 @@ const App: React.FC = () => {
     const accessToken = hashParams.get('access_token') || queryParams.get('access_token');
     const error = hashParams.get('error') || queryParams.get('error');
     const errorDescription = hashParams.get('error_description') || queryParams.get('error_description');
+    const type = hashParams.get('type') || queryParams.get('type'); // 'signup' for email confirmation
 
-    if (error) {
+    // Handle email confirmation
+    if (type === 'signup' || window.location.pathname === '/auth/confirm') {
+      if (error) {
+        console.error('Email confirmation error:', error, errorDescription);
+        alert(`Email verificatie fout: ${errorDescription || error}`);
+        // Redirect to login page
+        setView('landing');
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+
+      if (accessToken) {
+        console.log('Email confirmation detected, verifying...');
+        // The session will be set automatically by Supabase
+        // Wait a moment for the session to be set, then redirect to login
+        setTimeout(() => {
+          console.log('Email confirmed successfully, redirecting to login...');
+          setView('landing');
+          window.history.replaceState({}, document.title, '/');
+          alert('Je email is bevestigd! Je kunt nu inloggen.');
+        }, 1000);
+        return;
+      }
+    }
+
+    // Handle password reset
+    if (type === 'recovery' || window.location.pathname === '/auth/reset-password') {
+      if (error) {
+        console.error('Password reset error:', error, errorDescription);
+        alert(`Wachtwoord reset fout: ${errorDescription || error}`);
+        setView('landing');
+        window.history.replaceState({}, document.title, '/');
+        return;
+      }
+
+      if (accessToken) {
+        console.log('Password reset link detected, user can now reset password');
+        // The session will be set automatically by Supabase
+        // Show password reset form
+        setView('reset-password');
+        window.history.replaceState({}, document.title, '/auth/reset-password');
+        return;
+      }
+    }
+
+    // Handle OAuth callback
+    if (error && !type) {
       console.error('OAuth error:', error, errorDescription);
       alert(`OAuth fout: ${errorDescription || error}`);
       // Clean up the URL
@@ -240,11 +313,38 @@ const App: React.FC = () => {
       return;
     }
 
-    if (accessToken) {
+    if (accessToken && !type) {
       console.log('OAuth callback detected, session will be set by Supabase');
       // The session will be set automatically by Supabase
-      // Clean up the URL hash/query
+      // Clean up the URL hash/query first
       window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Set flag to indicate we're waiting for OAuth session
+      setWaitingForOAuth(true);
+      setView('dashboard');
+      
+      // Wait for the session to be set by Supabase
+      // The onAuthStateChange listener will clear the flag when session is ready
+      const checkSession = async () => {
+        let attempts = 0;
+        const maxAttempts = 15; // Increased attempts for slower connections
+        while (attempts < maxAttempts) {
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (currentSession) {
+            console.log('OAuth session confirmed, redirecting to dashboard');
+            setWaitingForOAuth(false);
+            return;
+          }
+          attempts++;
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        // If session not found after retries, clear the flag anyway
+        // The onAuthStateChange listener will handle it
+        console.log('OAuth session not found after retries, clearing wait flag');
+        setWaitingForOAuth(false);
+      };
+      
+      checkSession();
     }
   }, []);
 
@@ -259,6 +359,8 @@ const App: React.FC = () => {
       console.log('Auth state changed:', event, session?.user?.email);
       setSession(session);
       if (session) {
+        // Clear OAuth wait flag when session is confirmed
+        setWaitingForOAuth(false);
         // User is logged in - fetch their data (this will create profile if needed)
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           setView('dashboard');
@@ -267,6 +369,7 @@ const App: React.FC = () => {
           setView('dashboard');
         }
       } else {
+        setWaitingForOAuth(false);
         setView('landing');
         // Clear user-specific data on logout
         setInvoices([]);
@@ -333,7 +436,7 @@ const App: React.FC = () => {
       return subtotal + btwAmount;
     };
     
-    const MAX_INVOICE_TOTAL = 10_000_000;
+    const MAX_INVOICE_TOTAL = 999_999_999; // Maximaal 9 cijfers
     const totalAmount = calculateTotal(invoice);
     const formatCurrency = (amount: number) => new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(amount);
 
@@ -538,14 +641,31 @@ const App: React.FC = () => {
         return contentWrapper(<UpgradePage setCurrentView={handleSetCurrentView} session={session} userProfile={userProfile} onUpgrade={handleUpgradeToPro} />);
       case 'help':
         return <HelpPage />;
+      case 'checkout-success':
+        return <CheckoutSuccessPage setCurrentView={handleSetCurrentView} />;
       default:
         return contentWrapper(<Dashboard invoices={invoices} setCurrentView={handleSetCurrentView} onViewInvoice={handleViewInvoice} session={session} isFreePlanLimitReached={isFreePlanLimitReached} />);
     }
   };
 
   if (!session) {
+    // If we're waiting for OAuth callback, show loading instead of redirecting to landing
+    if (waitingForOAuth) {
+      return (
+        <div className="flex items-center justify-center h-screen w-full">
+          <div className="text-center">
+            <p className="text-zinc-500 mb-2">Inloggen met Google...</p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mx-auto"></div>
+          </div>
+        </div>
+      );
+    }
+    
     if (view === 'login' || view === 'signup') {
         return <AuthPage view={view} onSwitchView={setView} onBackToHome={() => setView('landing')} />
+    }
+    if (view === 'reset-password') {
+        return <ResetPasswordPage onBackToLogin={() => setView('login')} />
     }
     
     const handleNavigateToLanding = (sectionId?: string) => {

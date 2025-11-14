@@ -110,3 +110,6 @@ De applicatie heeft nu uitgebreide console logging. Open de browser console en:
 - [ ] Geen ad blockers actief
 - [ ] Browser console toont geen errors
 
+
+
+

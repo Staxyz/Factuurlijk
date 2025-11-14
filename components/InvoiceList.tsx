@@ -73,6 +73,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, userProfile,
     invoiceElement.style.left = '-9999px';
     invoiceElement.style.width = '210mm';
     invoiceElement.style.height = '297mm';
+    invoiceElement.style.backgroundColor = 'white';
     document.body.appendChild(invoiceElement);
   
     const root = ReactDOM.createRoot(invoiceElement);
@@ -82,18 +83,131 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, userProfile,
           invoice={invoice}
           userProfile={userProfile}
           templateStyle={userProfile.template_style}
+          templateCustomizations={userProfile.template_customizations}
           isPdfMode={true}
+          previewSize="large"
         />
       </React.StrictMode>
     );
   
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Wait for React to render
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Wait for all images in the invoice element to fully load
+    const images = invoiceElement.querySelectorAll('img');
+    if (images.length > 0) {
+        console.log(`Waiting for ${images.length} image(s) to load...`);
+        
+        await Promise.all(
+            Array.from(images).map((img: HTMLImageElement, index) => {
+                return new Promise<void>((resolve) => {
+                    const imgSrc = img.src.substring(0, 50);
+                    console.log(`Image ${index + 1}: src=${imgSrc}..., complete=${img.complete}, naturalWidth=${img.naturalWidth}, naturalHeight=${img.naturalHeight}`);
+                    
+                    // Check if image is already loaded and has content
+                    if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+                        console.log(`Image ${index + 1} already loaded`);
+                        resolve();
+                        return;
+                    }
+                    
+                    // Wait for image to load
+                    const onLoad = () => {
+                        img.removeEventListener('load', onLoad);
+                        img.removeEventListener('error', onError);
+                        // Double check that image has content
+                        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                            console.log(`Image ${index + 1} loaded successfully: ${img.naturalWidth}x${img.naturalHeight}`);
+                            resolve();
+                        } else {
+                            console.warn(`Image ${index + 1} loaded but has no dimensions`);
+                            // If no content, wait a bit more and resolve anyway
+                            setTimeout(resolve, 500);
+                        }
+                    };
+                    
+                    const onError = (e: Event) => {
+                        img.removeEventListener('load', onLoad);
+                        img.removeEventListener('error', onError);
+                        console.error(`Image ${index + 1} failed to load:`, e);
+                        resolve(); // Continue even if image fails to load
+                    };
+                    
+                    img.addEventListener('load', onLoad);
+                    img.addEventListener('error', onError);
+                    
+                    // If image src is set but not complete, trigger load by setting src again
+                    if (img.src && !img.complete) {
+                        const currentSrc = img.src;
+                        img.src = '';
+                        img.src = currentSrc;
+                    }
+                    
+                    // Max wait time of 10 seconds per image
+                    setTimeout(() => {
+                        img.removeEventListener('load', onLoad);
+                        img.removeEventListener('error', onError);
+                        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                            console.log(`Image ${index + 1} loaded after timeout`);
+                        } else {
+                            console.warn(`Image ${index + 1} timeout - continuing anyway`);
+                        }
+                        resolve();
+                    }, 10000);
+                });
+            })
+        );
+        
+        // Additional wait to ensure everything is rendered
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Convert ALL images to base64 (both blob URLs and public URLs)
+        console.log('Converting images to base64...');
+        for (const img of Array.from(images) as HTMLImageElement[]) {
+            if (img.src && img.naturalWidth > 0 && img.naturalHeight > 0) {
+                try {
+                    // Create a canvas to convert any image source to base64
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        canvas.width = img.naturalWidth;
+                        canvas.height = img.naturalHeight;
+                        
+                        // Draw the image to canvas
+                        ctx.drawImage(img, 0, 0);
+                        
+                        // Convert to base64
+                        const base64 = canvas.toDataURL('image/png');
+                        console.log(`Converted image to base64: ${base64.substring(0, 50)}...`);
+                        
+                        // Update the image src to base64
+                        img.src = base64;
+                        
+                        // Wait a bit for the image to update
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                    }
+                } catch (e) {
+                    console.error('Could not convert image to base64:', e, img.src);
+                }
+            } else {
+                console.warn('Skipping image conversion - no dimensions:', img.src);
+            }
+        }
+        
+        // Final wait after conversion
+        await new Promise(resolve => setTimeout(resolve, 500));
+        console.log('All images processed, generating PDF...');
+    }
   
     try {
         const canvas = await html2canvas(invoiceElement, {
             scale: 4,
             useCORS: true,
+            allowTaint: false, // Changed to false for better image rendering
             logging: false,
+            imageTimeout: 20000,
+            removeContainer: false,
+            backgroundColor: '#ffffff',
         });
 
         const imgData = canvas.toDataURL('image/png');
