@@ -69,6 +69,45 @@ app.post('/api/create-checkout-session', async (req, res) => {
 });
 
 /**
+ * Create Stripe Payment Link
+ * POST /api/create-payment-link
+ */
+app.post('/api/create-payment-link', async (req, res) => {
+  try {
+    const { priceId } = req.body;
+
+    console.log('📝 Creating payment link for price:', priceId);
+
+    // Validate input
+    if (!priceId) {
+      console.error('❌ Missing required field: priceId');
+      return res.status(400).json({
+        error: 'Missing required field: priceId'
+      });
+    }
+
+    // Create payment link
+    console.log('🔄 Calling Stripe API to create payment link...');
+    const paymentLink = await stripe.paymentLinks.create({
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+    });
+
+    console.log('✅ Payment link created:', paymentLink.url);
+    res.json({ paymentLinkUrl: paymentLink.url });
+  } catch (error) {
+    console.error('❌ Error creating payment link:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Internal server error'
+    });
+  }
+});
+
+/**
  * Health check
  * GET /api/health
  */
