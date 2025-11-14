@@ -1,7 +1,5 @@
-import { supabase } from '../supabaseClient';
-
 /**
- * Create a Stripe checkout session
+ * Create a Stripe checkout session via local backend API
  * @param priceId - Stripe Price ID (monthly or yearly)
  * @param userEmail - User email address
  * @param successUrl - URL to redirect after successful payment
@@ -14,26 +12,24 @@ export async function createCheckoutSession(
   cancelUrl: string
 ): Promise<string> {
   try {
-    // Call Supabase Edge Function to create Stripe checkout session
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        },
-        body: JSON.stringify({
-          priceId,
-          userEmail,
-          successUrl,
-          cancelUrl,
-        }),
-      }
-    );
+    // Call local backend API instead of Edge Function
+    const response = await fetch('http://localhost:3001/api/create-checkout-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        priceId,
+        userEmail,
+        successUrl,
+        cancelUrl,
+      }),
+    });
 
     if (!response.ok) {
-      throw new Error('Failed to create checkout session');
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Backend API error:', errorData);
+      throw new Error(errorData.error || 'Failed to create checkout session');
     }
 
     const data = await response.json();
@@ -50,20 +46,10 @@ export async function createCheckoutSession(
  */
 export async function redirectToCheckout(sessionId: string): Promise<void> {
   try {
-    const { loadStripe } = await import('@stripe/stripe-js');
-    const stripe = await loadStripe(
-      import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
-    );
-
-    if (!stripe) {
-      throw new Error('Stripe failed to load');
-    }
-
-    const { error } = await stripe.redirectToCheckout({ sessionId });
-
-    if (error) {
-      throw new Error(error.message);
-    }
+    // Stripe recommends redirecting directly to the Stripe Checkout URL
+    // The session ID is used as a query parameter in the checkout URL
+    const checkoutUrl = `https://checkout.stripe.com/pay/${sessionId}`;
+    window.location.href = checkoutUrl;
   } catch (error) {
     console.error('Error redirecting to checkout:', error);
     throw error;
