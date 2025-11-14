@@ -60,10 +60,8 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
           throw updateError;
         }
 
-        // Redirect to dashboard after 2 seconds
-        setTimeout(() => {
-          setCurrentView('dashboard');
-        }, 2000);
+        // Redirect to dashboard immediately after successful upgrade
+        setCurrentView('dashboard');
       } catch (err) {
         console.error('Checkout processing error:', err);
         setError(err instanceof Error ? err.message : 'Failed to process payment');

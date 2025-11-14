@@ -43,6 +43,9 @@ export const UpgradePage: React.FC<UpgradePageProps> = ({ setCurrentView, sessio
 
             const successUrl = `${window.location.origin}/#/checkout-success?session_id={CHECKOUT_SESSION_ID}`;
             const cancelUrl = `${window.location.origin}/#/upgrade`;
+            
+            console.log('Success URL:', successUrl);
+            console.log('Cancel URL:', cancelUrl);
 
             await initiateCheckout(priceId, userEmail, successUrl, cancelUrl);
         } catch (err) {
