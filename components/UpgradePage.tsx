@@ -41,8 +41,8 @@ export const UpgradePage: React.FC<UpgradePageProps> = ({ setCurrentView, sessio
                 throw new Error('Stripe configuration missing');
             }
 
-            const successUrl = `${window.location.origin}/checkout-success`;
-            const cancelUrl = `${window.location.origin}/upgrade`;
+            const successUrl = `${window.location.origin}/#/checkout-success?session_id={CHECKOUT_SESSION_ID}`;
+            const cancelUrl = `${window.location.origin}/#/upgrade`;
 
             await initiateCheckout(priceId, userEmail, successUrl, cancelUrl);
         } catch (err) {

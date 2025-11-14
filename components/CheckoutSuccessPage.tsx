@@ -13,8 +13,15 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
   useEffect(() => {
     const processCheckout = async () => {
       try {
-        // Get the session_id from URL
-        const sessionId = new URLSearchParams(window.location.search).get('session_id');
+        // Get the session_id from URL query parameters (works with hash-based routing)
+        const urlParams = new URLSearchParams(window.location.search);
+        let sessionId = urlParams.get('session_id');
+        
+        // If not found in search, check hash
+        if (!sessionId && window.location.hash) {
+          const hashParams = new URLSearchParams(window.location.hash.substring(window.location.hash.indexOf('?')));
+          sessionId = hashParams.get('session_id');
+        }
         
         if (!sessionId) {
           throw new Error('No session ID found');
