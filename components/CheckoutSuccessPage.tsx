@@ -60,8 +60,13 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
           throw updateError;
         }
 
-        // Redirect to dashboard immediately after successful upgrade
-        setCurrentView('dashboard');
+        console.log('✅ Payment verified and user upgraded to Pro successfully');
+
+        // Redirect to dashboard after 7 seconds to allow Stripe to fully process
+        setTimeout(() => {
+          console.log('🚀 Redirecting to dashboard...');
+          setCurrentView('dashboard');
+        }, 7000);
       } catch (err) {
         console.error('Checkout processing error:', err);
         setError(err instanceof Error ? err.message : 'Failed to process payment');
@@ -74,11 +79,12 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
 
   if (isProcessing) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-white to-slate-100">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
-          <p className="text-zinc-600 text-lg">Je betaling wordt verwerkt...</p>
-          <p className="text-zinc-500 text-sm mt-2">Je wordt zo doorgestuurd naar je dashboard.</p>
+          <p className="text-zinc-600 text-lg font-semibold">Je betaling wordt verwerkt...</p>
+          <p className="text-zinc-500 text-sm mt-2">Je account wordt geupgrade naar Pro</p>
+          <p className="text-teal-600 text-sm mt-4 font-medium">Even geduld: je wordt over 7 seconden doorgestuurd</p>
         </div>
       </div>
     );
