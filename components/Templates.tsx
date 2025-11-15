@@ -78,7 +78,7 @@ const TemplateSelectionButton: React.FC<{
         <button
             type="button"
             onClick={onClick}
-            className={`group rounded-xl p-4 text-left transition-all duration-200 relative border-2 ${
+            className={`group rounded-xl overflow-hidden text-left transition-all duration-200 relative border-2 flex flex-col h-full ${
                 isSelected
                     ? 'bg-teal-50/50 border-teal-500 shadow-lg'
                     : 'bg-white border-stone-200 hover:border-stone-400 hover:shadow-md'
@@ -93,7 +93,8 @@ const TemplateSelectionButton: React.FC<{
                 </div>
             )}
 
-            <div className="h-44 bg-white shadow-inner rounded-md overflow-hidden border border-stone-200 relative">
+            {/* Preview Container */}
+            <div className="h-40 bg-white shadow-inner rounded-md overflow-hidden border border-stone-200 relative m-4 flex-shrink-0">
                 <div
                     className="absolute top-0 left-0 w-full"
                     style={{
@@ -113,8 +114,12 @@ const TemplateSelectionButton: React.FC<{
                     </div>
                 </div>
             </div>
-            <h4 className="mt-4 text-base font-bold text-zinc-800">{template.name}</h4>
-            <p className="mt-1 text-sm text-zinc-600">{template.description}</p>
+
+            {/* Text Content with Better Spacing */}
+            <div className="flex-1 flex flex-col px-4 pb-4">
+                <h4 className="text-base font-bold text-zinc-800 leading-snug">{template.name}</h4>
+                <p className="mt-2 text-sm text-zinc-600 leading-relaxed line-clamp-2">{template.description}</p>
+            </div>
         </button>
     );
 };
@@ -246,7 +251,7 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
                     <div className="space-y-12">
                          <div className="px-4 sm:px-0">
                             <h3 className="text-lg font-semibold text-zinc-800 mb-6">1. Kies een basisstijl</h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 auto-rows-max">
                                 {templates.map(template => (
                                      <TemplateSelectionButton
                                         key={template.id}
