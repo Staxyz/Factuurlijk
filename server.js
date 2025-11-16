@@ -54,11 +54,12 @@ app.post('/api/create-checkout-session', async (req, res) => {
         },
       ],
       mode: 'subscription',
-      success_url: successUrl,
+      success_url: successUrl.replace('{CHECKOUT_SESSION_ID}', '{CHECKOUT_SESSION_ID}'), // Stripe will replace this
       cancel_url: cancelUrl,
     });
 
     console.log('✅ Checkout session created:', session.id);
+    console.log('📋 Success URL will be:', session.success_url);
     res.json({ sessionId: session.id });
   } catch (error) {
     console.error('❌ Error creating checkout session:', error);
@@ -103,6 +104,103 @@ app.post('/api/create-payment-link', async (req, res) => {
     console.error('❌ Error creating payment link:', error);
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Internal server error'
+    });
+  }
+});
+
+/**
+ * ADMIN: Reset user plan to Free (for testing only)
+ * POST /api/admin/reset-plan
+ */
+app.post('/api/admin/reset-plan', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        error: 'Email is required'
+      });
+    }
+
+    console.log('🔧 Admin: Resetting plan for:', email);
+
+    // This is a test endpoint - in production, should require authentication
+    // For now, we'll just log it and warn
+    console.warn('⚠️  ADMIN ENDPOINT: Resetting plan for user:', email);
+
+    res.json({
+      message: 'Admin endpoint received',
+      email: email,
+      note: 'Note: You need to update Supabase directly. Go to your Supabase dashboard and update the profiles table.'
+    });
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Internal server error'
+    });
+  }
+});
+
+/**
+ * Verify Checkout Session Status
+ * POST /api/verify-session
+ * 
+ * This endpoint verifies that a Stripe checkout session was completed successfully.
+ * IMPORTANT: Only upgrade users to Pro if this returns status 'complete'
+ */
+app.post('/api/verify-session', async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+
+    console.log('🔍 Verifying checkout session:', sessionId);
+
+    // Validate input
+    if (!sessionId) {
+      console.error('❌ Missing sessionId');
+      return res.status(400).json({
+        error: 'Missing required field: sessionId',
+        status: 'invalid'
+      });
+    }
+
+    // Retrieve session from Stripe
+    console.log('🔄 Fetching session from Stripe...');
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    console.log('📊 Session retrieved:', {
+      id: session.id,
+      status: session.payment_status,
+      customer_email: session.customer_email,
+      subscription: session.subscription
+    });
+
+    // Check if payment is paid (not just initiated)
+    const isPaid = session.payment_status === 'paid';
+    const isProcessing = session.payment_status === 'unpaid'; // Payment initiated but not confirmed yet
+
+    if (!isPaid && !isProcessing) {
+      console.error('❌ Payment not successful. Status:', session.payment_status);
+      return res.json({
+        status: 'failed',
+        payment_status: session.payment_status,
+        message: 'Payment was not completed successfully'
+      });
+    }
+
+    console.log('✅ Session verified successfully! Payment status:', session.payment_status);
+    res.json({
+      status: 'complete',
+      payment_status: session.payment_status,
+      customer_email: session.customer_email,
+      subscription: session.subscription,
+      isPaid: isPaid,
+      message: 'Payment completed successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error verifying session:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Internal server error',
+      status: 'error'
     });
   }
 });

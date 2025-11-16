@@ -1,6 +1,6 @@
 export type TemplateStyle = 'modern' | 'classic' | 'minimalist';
 
-export type View = 'landing' | 'login' | 'signup' | 'dashboard' | 'invoices' | 'new-invoice' | 'edit-invoice' | 'profile' | 'templates' | 'favorites';
+export type View = 'landing' | 'login' | 'signup' | 'dashboard' | 'invoices' | 'new-invoice' | 'edit-invoice' | 'profile' | 'templates' | 'favorites' | 'checkout-success' | 'upgrade';
 
 export interface InvoiceLine {
   id: string;

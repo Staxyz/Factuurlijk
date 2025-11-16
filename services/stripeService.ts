@@ -53,15 +53,16 @@ export async function initiateCheckout(
   cancelUrl: string
 ): Promise<void> {
   try {
-    console.log('🚀 Initiating checkout...');
+    console.log('🚀 Initiating checkout with:', { priceId, userEmail, successUrl, cancelUrl });
     const sessionId = await createCheckoutSession(priceId, userEmail, successUrl, cancelUrl);
     
     // Redirect to Stripe hosted checkout
     const checkoutUrl = `https://checkout.stripe.com/pay/${sessionId}`;
-    console.log('🔗 Redirecting to:', checkoutUrl);
+    console.log('✅ Session created, redirecting to:', checkoutUrl);
     window.location.href = checkoutUrl;
   } catch (error) {
     console.error('❌ Error initiating checkout:', error);
+    console.error('   Error details:', error instanceof Error ? error.message : String(error));
     throw error;
   }
 }

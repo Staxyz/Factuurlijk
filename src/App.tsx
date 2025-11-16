@@ -11,6 +11,8 @@ import { LandingPage } from '../components/LandingPage';
 import { AuthPage } from '../components/AuthPage';
 import { Templates } from '../components/Templates';
 import { Favorites } from '../components/Favorites';
+import { CheckoutSuccessPage } from '../components/CheckoutSuccessPage';
+import { UpgradePage } from '../components/UpgradePage';
 
 // FIX: Define mock data locally to match the types in `src/types.ts` and resolve import errors.
 const mockCustomers: Customer[] = [
@@ -101,6 +103,35 @@ const App: React.FC = () => {
     setCustomers(mockCustomers);
   }, []);
 
+  // Handle hash-based routing - MUST RUN BEFORE OAuth/other handlers
+  useEffect(() => {
+    const handleHashChange = () => {
+      const fullHash = window.location.hash; // Include the #
+      const hash = fullHash.slice(1); // Remove the #
+      const [route] = hash.split('?'); // Get route part before query params
+      
+      console.log('🔗 Hash change detected - fullHash:', fullHash, 'hash:', hash, 'route:', route);
+      
+      // Map routes to view names - check for these FIRST
+      if (hash.includes('checkout-success')) {
+        console.log('✅ FOUND checkout-success in hash, setting view');
+        setView('checkout-success');
+        return;
+      } else if (hash.includes('upgrade')) {
+        console.log('✅ FOUND upgrade in hash, setting view');
+        setView('upgrade');
+        return;
+      } else {
+        console.log('⚠️ No matching route in hash');
+      }
+    };
+
+    console.log('📍 Hash routing useEffect mounted');
+    handleHashChange();
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
   const handleLogin = () => {
     setIsLoggedIn(true);
     setView('dashboard');
@@ -184,6 +215,10 @@ const App: React.FC = () => {
         return <Templates userProfile={userProfile} setUserProfile={setUserProfile} session={null} />;
       case 'favorites':
         return <Favorites />;
+      case 'checkout-success':
+        return <CheckoutSuccessPage setCurrentView={handleSetCurrentView} />;
+      case 'upgrade':
+        return <UpgradePage setCurrentView={handleSetCurrentView} />;
       default:
         return <Dashboard invoices={invoices} setCurrentView={handleSetCurrentView} onViewInvoice={() => {}} session={null} isFreePlanLimitReached={false} />;
     }
@@ -194,6 +229,11 @@ const App: React.FC = () => {
         return <AuthPage view={view} onSwitchView={handleNavigate} onBackToHome={() => setView('landing')} />
     }
     return <LandingPage onNavigate={handleNavigate} />;
+  }
+
+  // Show fullscreen checkout-success page without sidebar
+  if (view === 'checkout-success') {
+    return <CheckoutSuccessPage setCurrentView={handleSetCurrentView} />;
   }
 
   return (

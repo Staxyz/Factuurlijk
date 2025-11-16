@@ -78,7 +78,7 @@ const TemplateSelectionButton: React.FC<{
         <button
             type="button"
             onClick={onClick}
-            className={`group rounded-xl overflow-hidden text-left transition-all duration-200 relative border-2 flex flex-col h-full ${
+            className={`group rounded-xl overflow-hidden text-left transition-all duration-200 relative border-2 flex flex-col ${
                 isSelected
                     ? 'bg-teal-50/50 border-teal-500 shadow-lg'
                     : 'bg-white border-stone-200 hover:border-stone-400 hover:shadow-md'
@@ -86,15 +86,15 @@ const TemplateSelectionButton: React.FC<{
             aria-pressed={isSelected}
         >
             {isSelected && (
-                <div className="absolute top-3 right-3 w-6 h-6 bg-zinc-800 text-white rounded-full flex items-center justify-center ring-4 ring-white z-10">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <div className="absolute top-2 right-2 sm:top-3 sm:right-3 w-5 h-5 sm:w-6 sm:h-6 bg-zinc-800 text-white rounded-full flex items-center justify-center ring-2 sm:ring-4 ring-white z-10">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 sm:h-4 sm:w-4" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                 </div>
             )}
 
             {/* Preview Container */}
-            <div className="h-40 bg-white shadow-inner rounded-md overflow-hidden border border-stone-200 relative m-4 flex-shrink-0">
+            <div className="h-32 sm:h-40 bg-white shadow-inner rounded-md overflow-hidden border border-stone-200 relative m-3 sm:m-4 flex-shrink-0">
                 <div
                     className="absolute top-0 left-0 w-full"
                     style={{
@@ -116,9 +116,9 @@ const TemplateSelectionButton: React.FC<{
             </div>
 
             {/* Text Content with Better Spacing */}
-            <div className="flex-1 flex flex-col px-4 pb-4">
-                <h4 className="text-base font-bold text-zinc-800 leading-snug">{template.name}</h4>
-                <p className="mt-2 text-sm text-zinc-600 leading-relaxed line-clamp-2">{template.description}</p>
+            <div className="flex-1 flex flex-col px-3 sm:px-4 pb-3 sm:pb-4 min-h-[80px]">
+                <h4 className="text-sm sm:text-base font-bold text-zinc-800 leading-tight mb-1.5 sm:mb-2 break-words">{template.name}</h4>
+                <p className="text-xs sm:text-sm text-zinc-600 leading-relaxed line-clamp-2 break-words">{template.description}</p>
             </div>
         </button>
     );
@@ -201,34 +201,34 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
   }));
 
   return (
-    <div className="h-full flex flex-col p-4 sm:p-6 md:p-8">
+    <div className="h-full flex flex-col p-4 sm:p-6 md:p-8 pb-20 sm:pb-8">
         {/* Toast Notification */}
         <div
-            className={`fixed top-6 right-6 z-50 bg-white border border-green-200 shadow-lg rounded-lg p-4 flex items-start transition-all duration-300 ease-in-out ${
+            className={`fixed top-4 right-4 sm:top-6 sm:right-6 z-50 bg-white border border-green-200 shadow-lg rounded-lg p-3 sm:p-4 flex items-start transition-all duration-300 ease-in-out max-w-[calc(100vw-2rem)] ${
                 showSuccess ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-12 pointer-events-none'
             }`}
         >
             <div className="flex-shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-500" viewBox="0 0 20 20" fill="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 text-green-500" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
             </div>
-            <div className="ml-3">
-                <p className="text-sm font-bold text-zinc-800">Template opgeslagen!</p>
-                <p className="mt-1 text-sm text-zinc-600">Alle nieuwe facturen die je aanmaakt, zullen nu deze layout gebruiken.</p>
+            <div className="ml-2 sm:ml-3">
+                <p className="text-xs sm:text-sm font-bold text-zinc-800">Template opgeslagen!</p>
+                <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-zinc-600">Alle nieuwe facturen die je aanmaakt, zullen nu deze layout gebruiken.</p>
             </div>
         </div>
 
         {/* Header */}
-        <header className="flex-shrink-0 pb-4 mb-4 border-b border-stone-200">
-            <h1 className="text-2xl font-bold text-zinc-900">Pas je factuurtemplate aan</h1>
-            <p className="text-zinc-600 mt-1">Kies een basisstijl en pas de details aan. Deze stijl wordt gebruikt voor alle nieuwe facturen.</p>
+        <header className="flex-shrink-0 pb-4 mb-4 sm:mb-6 border-b border-stone-200">
+            <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Pas je factuurtemplate aan</h1>
+            <p className="text-sm sm:text-base text-zinc-600 mt-1">Kies een basisstijl en pas de details aan. Deze stijl wordt gebruikt voor alle nieuwe facturen.</p>
         </header>
 
         {/* Main Content */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-8 overflow-hidden">
-             {/* Left Column: Live Preview (fixed) */}
-            <div className="flex lg:col-span-1 bg-stone-100 p-2 sm:p-4 rounded-lg flex-col overflow-hidden h-[60vh] lg:h-full">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 overflow-hidden">
+             {/* Left Column: Live Preview - Hidden on mobile, shown on larger screens */}
+            <div className="hidden lg:flex lg:col-span-1 bg-stone-100 p-2 sm:p-4 rounded-lg flex-col overflow-hidden h-full">
                 <h3 className="text-lg font-semibold text-zinc-800 mb-4 flex-shrink-0">Live Voorbeeld</h3>
                 <div className="flex-1 w-full h-full flex items-center justify-center min-h-0">
                     <div className="bg-white shadow-lg rounded-md overflow-hidden max-w-full max-h-full aspect-[210/297] transform scale-95">
@@ -245,13 +245,12 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
                 </div>
             </div>
 
-            {/* Right Column: Selection & Customization (with sticky footer) */}
+            {/* Right Column: Selection & Customization */}
             <div className="lg:col-span-1 flex flex-col overflow-hidden">
-                <div className="flex-grow overflow-y-auto p-1 sm:p-2 md:p-4">
-                    <div className="space-y-12">
-                         <div className="px-4 sm:px-0">
-                            <h3 className="text-lg font-semibold text-zinc-800 mb-6">1. Kies een basisstijl</h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 auto-rows-max">
+                <div className="flex-grow overflow-y-auto space-y-8 sm:space-y-12">
+                         <div>
+                            <h3 className="text-base sm:text-lg font-semibold text-zinc-800 mb-4 sm:mb-6">1. Kies een basisstijl</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                                 {templates.map(template => (
                                      <TemplateSelectionButton
                                         key={template.id}
@@ -264,24 +263,24 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
                             </div>
                          </div>
 
-                         <div className="w-full max-w-md mx-auto">
-                            <h3 className="text-lg font-semibold text-zinc-800 mb-6">2. Pas de details aan</h3>
-                            <div className="bg-white p-6 rounded-lg border border-stone-200 space-y-6">
+                         <div className="w-full">
+                            <h3 className="text-base sm:text-lg font-semibold text-zinc-800 mb-4 sm:mb-6">2. Pas de details aan</h3>
+                            <div className="bg-white p-4 sm:p-6 rounded-lg border border-stone-200 space-y-5 sm:space-y-6">
                                 <div>
-                                    <label htmlFor="primary_color" className="block text-base font-medium text-zinc-700">Accentkleur</label>
-                                    <div className="flex flex-wrap gap-3 mt-3">
+                                    <label htmlFor="primary_color" className="block text-sm sm:text-base font-medium text-zinc-700 mb-2 sm:mb-3">Accentkleur</label>
+                                    <div className="flex flex-wrap gap-2 sm:gap-3">
                                         {colorPalette.map(color => (
                                             <button
                                                 key={color}
                                                 type="button"
                                                 aria-label={`Kies kleur ${color}`}
-                                                className={`w-9 h-9 rounded-full border-2 transition-all ${customizations.primary_color.toLowerCase() === color.toLowerCase() ? 'border-teal-500 ring-2 ring-teal-200' : 'border-white hover:border-stone-300'}`}
+                                                className={`w-10 h-10 sm:w-9 sm:h-9 rounded-full border-2 transition-all ${customizations.primary_color.toLowerCase() === color.toLowerCase() ? 'border-teal-500 ring-2 ring-teal-200' : 'border-white hover:border-stone-300'}`}
                                                 style={{ backgroundColor: color }}
                                                 onClick={() => handleCustomizationChange('primary_color', color)}
                                             />
                                         ))}
                                         {/* Custom Color Picker */}
-                                        <div className="relative w-9 h-9" title="Kies een eigen kleur">
+                                        <div className="relative w-10 h-10 sm:w-9 sm:h-9" title="Kies een eigen kleur">
                                             <input
                                                 type="color"
                                                 id="custom_color_picker"
@@ -291,25 +290,25 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
                                             />
                                             <label
                                                 htmlFor="custom_color_picker"
-                                                className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${
+                                                className={`w-10 h-10 sm:w-9 sm:h-9 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${
                                                     !colorPalette.includes(customizations.primary_color)
                                                         ? 'border-teal-500 ring-2 ring-teal-200'
                                                         : 'border-white hover:border-stone-300'
                                                 }`}
                                                 style={{ backgroundColor: customizations.primary_color }}
                                             >
-                                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white mix-blend-difference"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>
+                                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white mix-blend-difference"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>
                                             </label>
                                         </div>
                                     </div>
                                 </div>
                                 <div>
-                                    <label htmlFor="font" className="block text-base font-medium text-zinc-700">Lettertype</label>
+                                    <label htmlFor="font" className="block text-sm sm:text-base font-medium text-zinc-700 mb-2">Lettertype</label>
                                     <select 
                                         id="font"
                                         value={customizations.font}
                                         onChange={(e) => handleCustomizationChange('font', e.target.value)}
-                                        className="mt-2 block w-full rounded-md border-stone-300 bg-white px-3 py-2 text-base focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                                        className="mt-0 block w-full rounded-md border-stone-300 bg-white px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
                                     >
                                         <option value="sans">Standaard (Sans-serif)</option>
                                         <option value="serif">Klassiek (Serif)</option>
@@ -317,25 +316,25 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
                                     </select>
                                 </div>
                                  <div>
-                                    <label htmlFor="footer_text" className="block text-base font-medium text-zinc-700">Factuurvoettekst</label>
+                                    <label htmlFor="footer_text" className="block text-sm sm:text-base font-medium text-zinc-700 mb-2">Factuurvoettekst</label>
                                     <textarea
                                         id="footer_text"
                                         rows={4}
                                         value={footerText}
                                         onChange={(e) => setFooterText(e.target.value)}
-                                        className="mt-2 block w-full rounded-md border-stone-300 bg-white px-3 py-2 text-base focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                                        className="mt-0 block w-full rounded-md border-stone-300 bg-white px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
                                         placeholder="Laat leeg voor de standaardtekst."
                                     ></textarea>
-                                    <p className="mt-2 text-sm text-zinc-500">Deze tekst verschijnt onderaan je factuur.</p>
+                                    <p className="mt-2 text-xs sm:text-sm text-zinc-500">Deze tekst verschijnt onderaan je factuur.</p>
                                     <div className="mt-4 pt-4 border-t border-stone-200">
-                                        <p className="text-base font-medium text-zinc-600">Suggesties:</p>
-                                        <div className="flex flex-wrap gap-2 mt-3">
+                                        <p className="text-sm sm:text-base font-medium text-zinc-600 mb-3">Suggesties:</p>
+                                        <div className="flex flex-wrap gap-2">
                                             {processedFooterSuggestions.map((suggestion) => (
                                                 <button
                                                     key={suggestion.name}
                                                     type="button"
                                                     onClick={() => setFooterText(suggestion.text)}
-                                                    className="px-3 py-1.5 text-sm font-medium rounded-md bg-white border border-stone-300 text-zinc-700 hover:bg-stone-100 hover:border-stone-400 transition-all shadow-sm"
+                                                    className="px-3 py-2 text-xs sm:text-sm font-medium rounded-md bg-white border border-stone-300 text-zinc-700 hover:bg-stone-100 hover:border-stone-400 transition-all shadow-sm"
                                                 >
                                                     {suggestion.name}
                                                 </button>
@@ -346,13 +345,12 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
                             </div>
                          </div>
                     </div>
-                </div>
 
-                 <div className="flex-shrink-0 flex items-center space-x-6 bg-slate-100/80 backdrop-blur-sm border-t border-stone-200 p-6">
+                 <div className="flex-shrink-0 flex items-center justify-center sm:justify-start bg-slate-100/80 backdrop-blur-sm border-t border-stone-200 p-4 sm:p-6 mt-6 sm:mt-0 sticky bottom-0">
                     <button 
                         onClick={handleSave}
                         disabled={!hasChanges || isSaving}
-                        className="rounded-md bg-teal-600 px-5 py-2.5 text-base font-medium text-white shadow-sm hover:bg-teal-700 disabled:bg-teal-400 disabled:cursor-not-allowed"
+                        className="w-full sm:w-auto rounded-md bg-teal-600 px-5 py-3 text-base font-medium text-white shadow-sm hover:bg-teal-700 disabled:bg-teal-400 disabled:cursor-not-allowed transition-colors"
                     >
                         {isSaving ? 'Opslaan...' : 'Wijzigingen Opslaan'}
                     </button>

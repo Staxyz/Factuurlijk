@@ -69,89 +69,118 @@ export const Dashboard: React.FC<DashboardProps> = ({ invoices, setCurrentView, 
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
         <div>
-            <h1 className="text-3xl font-bold text-zinc-900">Dashboard</h1>
-            {userName && <p className="text-xl text-zinc-600 mt-2">Welkom, {userName}</p>}
+            <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900">Dashboard</h1>
+            {userName && <p className="text-lg sm:text-xl text-zinc-600 mt-1 sm:mt-2">Welkom, {userName}</p>}
         </div>
-        <button onClick={handleNewInvoiceClick} className="flex items-center justify-center bg-teal-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-teal-700 transition-colors shadow-sm mt-4 sm:mt-0">
+        <button onClick={handleNewInvoiceClick} className="flex items-center justify-center bg-teal-600 text-white px-5 py-3 rounded-lg font-medium hover:bg-teal-700 transition-colors shadow-sm w-full sm:w-auto">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             Nieuwe Factuur
         </button>
       </div>
       
       {/* Statistics Section */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
           {/* Card 1: Omzet deze maand */}
-          <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm flex flex-col h-full transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+          <div className="bg-white p-4 sm:p-6 rounded-xl border border-stone-200 shadow-sm flex flex-col h-full transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
             <div className="flex-grow">
               <div className="flex items-start justify-between">
-                  <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-green-100 text-green-600 rounded-lg">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-green-100 text-green-600 rounded-lg">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                       </svg>
                   </div>
                   <div className="text-right">
-                      <h2 className="text-base font-medium text-zinc-500">Omzet deze maand</h2>
-                      <p className="text-2xl font-bold text-zinc-900 mt-1">{formatCurrency(revenueThisMonth)}</p>
+                      <h2 className="text-sm sm:text-base font-medium text-zinc-500">Omzet deze maand</h2>
+                      <p className="text-xl sm:text-2xl font-bold text-zinc-900 mt-1">{formatCurrency(revenueThisMonth)}</p>
                   </div>
               </div>
             </div>
-            <p className="text-sm text-zinc-500 mt-4">&nbsp;</p>
+            <p className="text-xs sm:text-sm text-zinc-500 mt-3 sm:mt-4">&nbsp;</p>
           </div>
 
           {/* Card 2: Openstaand Bedrag */}
-          <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm flex flex-col h-full transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+          <div className="bg-white p-4 sm:p-6 rounded-xl border border-stone-200 shadow-sm flex flex-col h-full transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
             <div className="flex-grow">
                <div className="flex items-start justify-between">
-                  <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-yellow-100 text-yellow-600 rounded-lg">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-yellow-100 text-yellow-600 rounded-lg">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                   </div>
                   <div className="text-right">
-                      <h2 className="text-base font-medium text-zinc-500">Openstaand Bedrag</h2>
-                      <p className="text-2xl font-bold text-zinc-900 mt-1">{formatCurrency(totalOpenAmount)}</p>
+                      <h2 className="text-sm sm:text-base font-medium text-zinc-500">Openstaand Bedrag</h2>
+                      <p className="text-xl sm:text-2xl font-bold text-zinc-900 mt-1">{formatCurrency(totalOpenAmount)}</p>
                   </div>
               </div>
             </div>
-            <p className="text-sm text-zinc-500 mt-4">{openInvoices.length > 0 ? `in ${openInvoices.length} ${openInvoices.length === 1 ? 'factuur' : 'facturen'}` : '\u00A0'}</p>
+            <p className="text-xs sm:text-sm text-zinc-500 mt-3 sm:mt-4">{openInvoices.length > 0 ? `in ${openInvoices.length} ${openInvoices.length === 1 ? 'factuur' : 'facturen'}` : '\u00A0'}</p>
           </div>
 
           {/* Card 3: Aantal Openstaand */}
-          <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm flex flex-col h-full transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+          <div className="bg-white p-4 sm:p-6 rounded-xl border border-stone-200 shadow-sm flex flex-col h-full transition-all duration-300 hover:shadow-lg hover:-translate-y-1 sm:col-span-2 md:col-span-1">
             <div className="flex-grow">
               <div className="flex items-start justify-between">
-                  <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-blue-100 text-blue-600 rounded-lg">
-                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-blue-100 text-blue-600 rounded-lg">
+                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                   </div>
                   <div className="text-right">
-                      <h2 className="text-base font-medium text-zinc-500">Aantal Openstaand</h2>
-                      <p className="text-2xl font-bold text-zinc-900 mt-1">{openInvoices.length}</p>
+                      <h2 className="text-sm sm:text-base font-medium text-zinc-500">Aantal Openstaand</h2>
+                      <p className="text-xl sm:text-2xl font-bold text-zinc-900 mt-1">{openInvoices.length}</p>
                   </div>
               </div>
             </div>
-            <p className="text-sm text-zinc-500 mt-4">{openInvoices.length > 0 ? `${openInvoices.length === 1 ? '1 factuur staat open' : `${openInvoices.length} facturen staan open`}` : '\u00A0'}</p>
+            <p className="text-xs sm:text-sm text-zinc-500 mt-3 sm:mt-4">{openInvoices.length > 0 ? `${openInvoices.length === 1 ? '1 factuur staat open' : `${openInvoices.length} facturen staan open`}` : '\u00A0'}</p>
           </div>
         </div>
       
-       {/* Recent Invoices Table */}
+       {/* Recent Invoices - Mobile Card View / Desktop Table View */}
        <div className="bg-white p-4 sm:p-6 rounded-lg border border-stone-200 shadow-sm">
         <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-zinc-800">Recente Facturen</h2>
+            <h2 className="text-lg sm:text-xl font-semibold text-zinc-800">Recente Facturen</h2>
             <button onClick={() => setCurrentView('invoices')} className="text-sm font-medium text-teal-600 hover:text-teal-800">
                 Bekijk alles
             </button>
         </div>
-        <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[600px]">
+        
+        {/* Mobile Card View */}
+        <div className="block sm:hidden space-y-3">
+            {recentInvoices.length > 0 ? recentInvoices.map(invoice => (
+                <div 
+                    key={invoice.id} 
+                    className="border border-stone-200 rounded-lg p-4 hover:bg-stone-50 cursor-pointer transition-colors"
+                    onClick={() => onViewInvoice(invoice.id)}
+                >
+                    <div className="flex justify-between items-start mb-2">
+                        <div>
+                            <p className="font-semibold text-zinc-800">{invoice.invoice_number}</p>
+                            <p className="text-sm text-zinc-600 mt-1">{invoice.customer.name}</p>
+                        </div>
+                        {getStatusChip(invoice.status)}
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-stone-100">
+                        <p className="text-xs text-zinc-500">{formatDate(invoice.invoice_date)}</p>
+                        <p className="font-semibold text-zinc-800">{formatCurrency(calculateTotal(invoice))}</p>
+                    </div>
+                </div>
+            )) : (
+                <div className="text-center py-10 text-zinc-500">
+                    Nog geen facturen gemaakt.
+                </div>
+            )}
+        </div>
+        
+        {/* Desktop Table View */}
+        <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-left">
                 <thead>
                     <tr className="border-b border-stone-200">
                         <th className="p-3 text-sm font-semibold text-zinc-500 uppercase tracking-wider">Factuur ID</th>
                         <th className="p-3 text-sm font-semibold text-zinc-500 uppercase tracking-wider">Klant</th>
-                        <th className="p-3 text-sm font-semibold text-zinc-500 uppercase tracking-wider hidden sm:table-cell">Datum</th>
+                        <th className="p-3 text-sm font-semibold text-zinc-500 uppercase tracking-wider">Datum</th>
                         <th className="p-3 text-sm font-semibold text-zinc-500 uppercase tracking-wider text-right">Totaal</th>
                         <th className="p-3 text-sm font-semibold text-zinc-500 uppercase tracking-wider text-center">Status</th>
                     </tr>
@@ -161,9 +190,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ invoices, setCurrentView, 
                         <tr key={invoice.id} className="border-b border-stone-100 hover:bg-stone-100 cursor-pointer" onClick={() => onViewInvoice(invoice.id)}>
                             <td className="p-3 text-base font-medium text-zinc-800">{invoice.invoice_number}</td>
                             <td className="p-3 text-base text-zinc-600 truncate max-w-xs">{invoice.customer.name}</td>
-                            <td className="p-3 text-base text-zinc-600 hidden sm:table-cell">{formatDate(invoice.invoice_date)}</td>
+                            <td className="p-3 text-base text-zinc-600">{formatDate(invoice.invoice_date)}</td>
                             <td className="p-3 text-base font-medium text-zinc-800 text-right">{formatCurrency(calculateTotal(invoice))}</td>
-                            <td className="p-3 text-base text-center">{getStatusChip(invoice.status)}</td>
+                            <td className="p-3 text-center">{getStatusChip(invoice.status)}</td>
                         </tr>
                     )) : (
                         <tr>

@@ -41,11 +41,15 @@ export const UpgradePage: React.FC<UpgradePageProps> = ({ setCurrentView, sessio
                 throw new Error('Stripe configuration missing');
             }
 
+            // Stripe will replace {CHECKOUT_SESSION_ID} with the actual session ID
             const successUrl = `${window.location.origin}/#/checkout-success?session_id={CHECKOUT_SESSION_ID}`;
             const cancelUrl = `${window.location.origin}/#/upgrade`;
             
-            console.log('Success URL:', successUrl);
-            console.log('Cancel URL:', cancelUrl);
+            console.log('🔗 Checkout URLs:');
+            console.log('  Success:', successUrl);
+            console.log('  Cancel:', cancelUrl);
+            console.log('  Price ID:', priceId);
+            console.log('  User Email:', userEmail);
 
             await initiateCheckout(priceId, userEmail, successUrl, cancelUrl);
         } catch (err) {

@@ -7,6 +7,7 @@ interface CheckoutSuccessPageProps {
 }
 
 export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCurrentView }) => {
+  console.log('📄 CheckoutSuccessPage component mounted!');
   const [isProcessing, setIsProcessing] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -17,17 +18,55 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
       try {
         console.log('🔍 Starting checkout processing...');
         
-        // Get current user
+        // Extract session ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session_id');
+        
+        if (!sessionId) {
+          console.error('❌ No session ID found in URL');
+          throw new Error('Session ID niet gevonden. Kan betaling niet verifiëren.');
+        }
+
+        console.log('📝 Session ID extracted:', sessionId);
+
+        // STEP 1: Verify payment with backend
+        console.log('🔄 Verifying payment with Stripe...');
+        const verifyResponse = await fetch('http://localhost:3001/api/verify-session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ sessionId })
+        });
+
+        if (!verifyResponse.ok) {
+          const errorData = await verifyResponse.json();
+          console.error('❌ Verification failed:', errorData);
+          throw new Error(`Betaling kon niet worden geverifieerd: ${errorData.message || 'Onbekende fout'}`);
+        }
+
+        const verificationResult = await verifyResponse.json();
+        console.log('📊 Verification result:', verificationResult);
+
+        // Check if payment status is complete
+        if (verificationResult.status !== 'complete') {
+          console.error('❌ Payment not completed. Status:', verificationResult.status);
+          throw new Error(`Betaling niet voltooid. Status: ${verificationResult.payment_status}`);
+        }
+
+        console.log('✅ Payment verified successfully!');
+
+        // STEP 2: Get current user
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
           console.error('❌ No user found');
-          throw new Error('Not authenticated');
+          throw new Error('Gebruiker niet geverifieerd');
         }
 
         console.log('✅ User found:', user.id, user.email);
 
-        // Update user profile to pro directly
-        console.log('💾 Updating user profile to pro...');
+        // STEP 3: Update user profile to pro ONLY after payment verification
+        console.log('💾 Upgrading user profile to pro...');
         const { error: updateError, data } = await supabase
           .from('profiles')
           .update({ 
@@ -62,7 +101,7 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
         return () => clearInterval(redirectTimer);
       } catch (err) {
         console.error('❌ Checkout processing error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to process payment');
+        setError(err instanceof Error ? err.message : 'Fout bij het verwerken van de betaling');
         setIsProcessing(false);
       }
     };

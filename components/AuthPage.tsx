@@ -147,37 +147,43 @@ export const AuthPage: React.FC<AuthPageProps> = ({ view, onSwitchView, onBackTo
     try {
       // Get the current origin (works for both localhost and production)
       // Make sure this matches exactly with what's configured in Supabase Dashboard > Authentication > URL Configuration
-      const redirectUrl = `${window.location.origin}`;
+      const redirectUrl = `${window.location.origin}${window.location.pathname}`;
       
       console.log('=== Google OAuth Debug Info ===');
       console.log('Current origin:', window.location.origin);
+      console.log('Current pathname:', window.location.pathname);
       console.log('Full URL:', window.location.href);
       console.log('Redirect URL:', redirectUrl);
       console.log('===============================');
       
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-          options: {
-              redirectTo: redirectUrl,
-              skipBrowserRedirect: false,
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: false,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
           },
-    });
+        },
+      });
       
-    if (error) {
-          console.error('Google OAuth error:', error);
-          console.error('Error details:', JSON.stringify(error, null, 2));
-          setError(error.message || 'Er is een fout opgetreden bij het inloggen met Google. Controleer je Supabase configuratie.');
-          setLoading(false);
+      if (error) {
+        console.error('Google OAuth error:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        setError(error.message || 'Er is een fout opgetreden bij het inloggen met Google. Controleer je Supabase configuratie.');
+        setLoading(false);
       } else {
-          // If successful, the browser will redirect to Google
-          // The redirect will happen automatically, so we don't need to do anything here
-          console.log('Google OAuth initiated successfully, redirecting to Google...');
-          console.log('OAuth data:', data);
+        // If successful, the browser will redirect to Google
+        // The redirect will happen automatically, so we don't need to do anything here
+        console.log('Google OAuth initiated successfully, redirecting to Google...');
+        console.log('OAuth data:', data);
+        // Don't set loading to false here - the redirect will happen
       }
     } catch (err) {
       console.error('Unexpected error during Google OAuth:', err);
       setError('Er is een onverwachte fout opgetreden. Probeer het opnieuw.');
-        setLoading(false);
+      setLoading(false);
     }
   };
 
