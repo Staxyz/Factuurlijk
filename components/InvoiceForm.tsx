@@ -99,6 +99,11 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
   const [invoice, setInvoice] = useState<Invoice>(() => 
     initialInvoice || { ...newInvoiceTemplate(invoices), id: uuidv4() }
   );
+  const preventDiscountSignInput = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === '-' || event.key === '+') {
+      event.preventDefault();
+    }
+  };
   
   const [totalAmount, setTotalAmount] = useState(0);
   const [isOverLimit, setIsOverLimit] = useState(false);
@@ -263,12 +268,12 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
       </header>
       
       {/* Main Content */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 overflow-y-auto">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 overflow-hidden">
         {/* Left Column: Preview - Hidden on mobile, shown on larger screens */}
-        <div className="hidden lg:flex lg:col-span-1 bg-stone-100 p-2 rounded-lg flex-col overflow-hidden h-full">
-            <h2 className="text-lg font-bold text-zinc-800 mb-2 flex-shrink-0 px-2">Preview</h2>
-            <div className="flex-1 w-full h-full flex items-center justify-center min-h-0 py-2">
-                <div className="bg-white shadow-lg rounded-md overflow-hidden max-w-full max-h-full aspect-[210/297]">
+        <div className="hidden lg:flex lg:col-span-1 bg-stone-100 p-4 rounded-lg flex-col overflow-hidden">
+            <h3 className="text-lg font-semibold text-zinc-800 mb-4 flex-shrink-0">Preview</h3>
+            <div className="flex-1 flex items-center justify-center overflow-hidden">
+                <div className="bg-white shadow-lg rounded-md overflow-hidden h-full aspect-[210/297]">
                     <InvoicePreview 
                         invoice={invoice}
                         userProfile={userProfile}
@@ -281,7 +286,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
         </div>
 
         {/* Right Column: Form Inputs */}
-        <div className="lg:col-span-1 space-y-4 sm:space-y-6">
+        <div className="lg:col-span-1 overflow-y-auto space-y-4 sm:space-y-6">
             <h2 className="text-xl font-bold text-zinc-800 mb-4">Factuurgegevens</h2>
             <div className="bg-stone-50 p-4 sm:p-5 rounded-lg border border-stone-200 space-y-4">
                 <h3 className="font-semibold text-zinc-700 text-lg">Klant</h3>
@@ -384,7 +389,15 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium text-zinc-700 mb-2">Korting (%)</label>
-                                    <input type="number" step="any" placeholder="0" value={line.discount_percentage || ''} onChange={(e) => handleLineChange(line.id, 'discount_percentage', e.target.value)} className={inputStyle} />
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        placeholder="0"
+                                        value={line.discount_percentage || ''}
+                                        onChange={(e) => handleLineChange(line.id, 'discount_percentage', e.target.value)}
+                                        onKeyDown={preventDiscountSignInput}
+                                        className={inputStyle}
+                                    />
                                 </div>
                                 <div className="sm:col-span-2 flex items-center justify-between pt-2 border-t border-stone-200">
                                     <div>

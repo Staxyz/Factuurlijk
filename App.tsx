@@ -76,22 +76,50 @@ const getErrorMessage = (error: unknown, defaultMessage = 'Er is een onbekende f
 
 
 const App: React.FC = () => {
-  // Determine initial view from hash
-  const getInitialView = (): View => {
-    const hash = window.location.hash.toLowerCase();
-    if (hash.includes('checkout-success')) return 'checkout-success';
-    if (hash.includes('upgrade')) return 'upgrade';
-    return 'dashboard';
-  };
-
   // Authentication state
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [waitingForOAuth, setWaitingForOAuth] = useState(false); // Track if we're waiting for OAuth callback
 
-  // App view state - Initialize from hash!
-  const [view, setView] = useState<View>(getInitialView());
+  // App view state
+  const [view, setView] = useState<View>('dashboard'); // Will be overwritten by auth check
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isCheckoutRoute, setIsCheckoutRoute] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.location.hash.includes('checkout-success');
+  });
+  const isCheckoutRouteRef = useRef(isCheckoutRoute);
+  useEffect(() => {
+    isCheckoutRouteRef.current = isCheckoutRoute;
+  }, [isCheckoutRoute]);
+
+  // Basic hash-based routing for Stripe checkout success (and other hash routes)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleHashRoute = () => {
+      const hash = window.location.hash || '';
+      const normalized = hash.toLowerCase();
+      const isCheckoutHash = normalized.includes('checkout-success');
+      setIsCheckoutRoute(isCheckoutHash);
+
+      if (isCheckoutHash) {
+        console.log('🔗 Hash route detected: checkout-success', hash);
+        setView('checkout-success');
+        return;
+      }
+
+      if (normalized.includes('upgrade')) {
+        console.log('🔗 Hash route detected: upgrade');
+        setView('upgrade');
+        return;
+      }
+    };
+
+    handleHashRoute();
+    window.addEventListener('hashchange', handleHashRoute);
+    return () => window.removeEventListener('hashchange', handleHashRoute);
+  }, []);
   
   // Data state
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -255,29 +283,6 @@ const App: React.FC = () => {
     }
   }, [createUserProfile]);
 
-  // Handle hash-based routing - Check for these special routes
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash;
-      
-      // Extract the route (everything after # until ? or end)
-      const routePart = hash.split('?')[0].toLowerCase();
-      
-      if (routePart === '#/checkout-success' || routePart === '#checkout-success') {
-        setView('checkout-success');
-        return;
-      }
-      if (routePart === '#/upgrade' || routePart === '#upgrade') {
-        setView('upgrade');
-        return;
-      }
-    };
-
-    handleHashChange();
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
-
   // Handle OAuth callback and email confirmation from hash fragments or query parameters
   useEffect(() => {
     // Check if we're returning from an OAuth redirect or email confirmation
@@ -289,14 +294,6 @@ const App: React.FC = () => {
     const error = hashParams.get('error') || queryParams.get('error');
     const errorDescription = hashParams.get('error_description') || queryParams.get('error_description');
     const type = hashParams.get('type') || queryParams.get('type'); // 'signup' for email confirmation
-
-    console.log('=== OAuth Callback Detection ===');
-    console.log('Hash params:', Object.fromEntries(hashParams));
-    console.log('Query params:', Object.fromEntries(queryParams));
-    console.log('Access token present:', !!accessToken);
-    console.log('Error:', error);
-    console.log('Type:', type);
-    console.log('================================');
 
     // Handle email confirmation
     if (type === 'signup' || window.location.pathname === '/auth/confirm') {
@@ -343,66 +340,51 @@ const App: React.FC = () => {
       }
     }
 
-    // Handle OAuth callback (Google login/signup)
+    // Handle OAuth callback
     if (error && !type) {
       console.error('OAuth error:', error, errorDescription);
       alert(`OAuth fout: ${errorDescription || error}`);
       // Clean up the URL
       window.history.replaceState({}, document.title, window.location.pathname);
-      setView('landing');
       return;
     }
 
     if (accessToken && !type) {
-      console.log('✅ OAuth callback detected (Google Auth)');
-      console.log('Waiting for Supabase to process session...');
-      
+      console.log('✅ OAuth callback detected, session will be set by Supabase');
       // Set flag to indicate we're waiting for OAuth session
       setWaitingForOAuth(true);
+      setView('dashboard');
       
-      // Don't clean up URL yet - let Supabase process it first
+      // Clean up the URL hash/query AFTER setting the view
+      // This ensures the view is set before the URL is cleaned
+      const cleanUrl = () => {
+        const cleanPath = window.location.pathname || '/';
+        window.history.replaceState({}, document.title, cleanPath);
+        console.log('🧹 URL cleaned, path:', cleanPath);
+      };
+      
       // Wait for the session to be set by Supabase
+      // The onAuthStateChange listener will clear the flag when session is ready
       const checkSession = async () => {
         let attempts = 0;
         const maxAttempts = 20; // Increased attempts for slower connections
         while (attempts < maxAttempts) {
-          const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
-          
-          if (sessionError) {
-            console.error('Error getting session:', sessionError);
-          }
-          
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
           if (currentSession) {
-            console.log('✅ OAuth session confirmed! User:', currentSession.user.email);
-            // Clean up URL now that session is confirmed
-            window.history.replaceState({}, document.title, window.location.pathname);
+            console.log('✅ OAuth session confirmed, user:', currentSession.user?.email);
             setWaitingForOAuth(false);
             setView('dashboard');
+            cleanUrl();
             return;
           }
-          
           attempts++;
-          if (attempts % 5 === 0) {
-            console.log(`Waiting for session... (attempt ${attempts}/${maxAttempts})`);
-          }
           await new Promise(resolve => setTimeout(resolve, 300));
         }
-        
-        // If session not found after retries, try to get it one more time
-        console.warn('Session not found after retries, checking one more time...');
-        const { data: { session: finalSession } } = await supabase.auth.getSession();
-        if (finalSession) {
-          console.log('✅ Session found on final check!');
-          window.history.replaceState({}, document.title, window.location.pathname);
-          setWaitingForOAuth(false);
-          setView('dashboard');
-        } else {
-          console.error('❌ Session not found after all retries');
-          // Clean up URL anyway
-          window.history.replaceState({}, document.title, window.location.pathname);
-          setWaitingForOAuth(false);
-          // The onAuthStateChange listener will handle navigation
-        }
+        // If session not found after retries, clear the flag anyway
+        // The onAuthStateChange listener will handle it
+        console.log('⚠️ OAuth session not found after retries, clearing wait flag');
+        setWaitingForOAuth(false);
+        cleanUrl();
       };
       
       checkSession();
@@ -417,28 +399,35 @@ const App: React.FC = () => {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔐 Auth state changed:', event, session?.user?.email);
+      console.log('🔄 Auth state changed:', event, session?.user?.email);
       setSession(session);
-      
+
       if (session) {
-        // Clear OAuth wait flag when session is confirmed
         setWaitingForOAuth(false);
-        
-        // User is logged in - navigate to dashboard and fetch their data
-        console.log('✅ User signed in, navigating to dashboard...');
-        setView('dashboard');
-        
-        // Clean up any OAuth callback URLs from the address bar
-        if (window.location.hash.includes('access_token') || window.location.search.includes('access_token')) {
-          window.history.replaceState({}, document.title, window.location.pathname);
+
+        if (isCheckoutRouteRef.current) {
+          console.log('⏸ Checkout success route active - skipping automatic dashboard redirect');
+        } else {
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            console.log('✅ User signed in, redirecting to dashboard');
+            setView('dashboard');
+            if (window.location.hash.includes('access_token') || window.location.search.includes('access_token')) {
+              window.history.replaceState({}, document.title, window.location.pathname || '/');
+              console.log('🧹 Cleaned OAuth params from URL');
+            }
+          } else {
+            setView('dashboard');
+          }
         }
-        
-        // fetchData will be called by the useEffect below
       } else {
-        // User logged out
-        console.log('👋 User signed out');
         setWaitingForOAuth(false);
-        setView('landing');
+
+        if (isCheckoutRouteRef.current) {
+          console.log('⚠️ Checkout success route active without session - keeping current view');
+        } else {
+          setView('landing');
+        }
+
         // Clear user-specific data on logout
         setInvoices([]);
         setCustomers([]);
@@ -476,7 +465,23 @@ const App: React.FC = () => {
     if (targetView === 'new-customer') setCustomerToEdit(null);
     setView(targetView);
     setIsSidebarOpen(false); // Close sidebar on navigation
-  }
+  };
+
+  const clearCheckoutRoute = () => {
+    if (typeof window !== 'undefined' && window.location.hash.includes('checkout-success')) {
+      const cleanPath = window.location.pathname + window.location.search;
+      window.history.replaceState({}, document.title, cleanPath || '/');
+      console.log('🧹 Cleared checkout-success hash from URL');
+    }
+    setIsCheckoutRoute(false);
+  };
+
+  const handleCheckoutNavigation = (targetView: View) => {
+    if (targetView !== 'checkout-success') {
+      clearCheckoutRoute();
+    }
+    handleSetCurrentView(targetView);
+  };
 
   const handleViewInvoice = (invoiceId: string) => {
     const invoice = invoices.find(inv => inv.id === invoiceId);
@@ -650,7 +655,7 @@ const App: React.FC = () => {
       );
     }
     
-    const contentWrapper = (children: React.ReactNode) => <div className="p-4 sm:p-6 md:p-8 pb-20 sm:pb-8">{children}</div>;
+    const contentWrapper = (children: React.ReactNode) => <div className="p-4 sm:p-6 md:p-8">{children}</div>;
     const isFreePlanLimitReached = (userProfile.plan === 'free' && (userProfile.invoice_creation_count ?? 0) >= 3);
     
     switch (view) {
@@ -710,16 +715,20 @@ const App: React.FC = () => {
       case 'help':
         return <HelpPage />;
       case 'checkout-success':
-        return <CheckoutSuccessPage setCurrentView={handleSetCurrentView} />;
+        return (
+          <CheckoutSuccessPage
+            setCurrentView={handleCheckoutNavigation}
+            onUpgradeSuccess={async () => {
+              if (session?.user) {
+                await fetchData(session.user);
+              }
+            }}
+          />
+        );
       default:
         return contentWrapper(<Dashboard invoices={invoices} setCurrentView={handleSetCurrentView} onViewInvoice={handleViewInvoice} session={session} isFreePlanLimitReached={isFreePlanLimitReached} />);
     }
   };
-
-  // Show fullscreen checkout-success page without sidebar
-  if (view === 'checkout-success') {
-    return <CheckoutSuccessPage setCurrentView={handleSetCurrentView} />;
-  }
 
   if (!session) {
     // If we're waiting for OAuth callback, show loading instead of redirecting to landing
@@ -741,6 +750,10 @@ const App: React.FC = () => {
         return <ResetPasswordPage onBackToLogin={() => setView('login')} />
     }
     
+    if (view === 'checkout-success') {
+      return <CheckoutSuccessPage setCurrentView={handleCheckoutNavigation} />;
+    }
+
     const handleNavigateToLanding = (sectionId?: string) => {
         setView('landing');
         if (sectionId) {
@@ -786,7 +799,7 @@ const App: React.FC = () => {
         onLogout={handleLogout} 
         session={session}
         userProfile={userProfile}
-        isOpen={isSidebarOpen}
+         isOpen={isSidebarOpen}
         setIsOpen={setIsSidebarOpen}
       />
       <div className="flex-1 flex flex-col w-full min-w-0">

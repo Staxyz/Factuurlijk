@@ -228,19 +228,17 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
         {/* Main Content */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 overflow-hidden">
              {/* Left Column: Live Preview - Hidden on mobile, shown on larger screens */}
-            <div className="hidden lg:flex lg:col-span-1 bg-stone-100 p-2 sm:p-4 rounded-lg flex-col overflow-hidden h-full">
+            <div className="hidden lg:flex lg:col-span-1 bg-stone-100 p-4 rounded-lg flex-col overflow-hidden">
                 <h3 className="text-lg font-semibold text-zinc-800 mb-4 flex-shrink-0">Live Voorbeeld</h3>
-                <div className="flex-1 w-full h-full flex items-center justify-center min-h-0">
-                    <div className="bg-white shadow-lg rounded-md overflow-hidden max-w-full max-h-full aspect-[210/297] transform scale-95">
-                       <div className="w-full h-full overflow-hidden">
-                            <InvoicePreview 
-                                invoice={previewInvoice}
-                                userProfile={{...userProfile, invoice_footer_text: footerText}}
-                                templateStyle={selectedTemplate}
-                                templateCustomizations={customizations}
-                                previewSize="large"
-                            />
-                        </div>
+                <div className="flex-1 flex items-center justify-center overflow-hidden">
+                    <div className="bg-white shadow-lg rounded-md overflow-hidden h-full aspect-[210/297]">
+                        <InvoicePreview 
+                            invoice={previewInvoice}
+                            userProfile={{...userProfile, invoice_footer_text: footerText}}
+                            templateStyle={selectedTemplate}
+                            templateCustomizations={customizations}
+                            previewSize="large"
+                        />
                     </div>
                 </div>
             </div>

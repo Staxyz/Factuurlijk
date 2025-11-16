@@ -16,7 +16,6 @@ const CheckIcon: React.FC = () => (
 
 
 export const UpgradePage: React.FC<UpgradePageProps> = ({ setCurrentView, session, userProfile, onUpgrade }) => {
-    const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const userName = session?.user?.user_metadata?.full_name || userProfile.name;
@@ -24,37 +23,38 @@ export const UpgradePage: React.FC<UpgradePageProps> = ({ setCurrentView, sessio
     const isPro = userProfile.plan === 'pro';
 
     const handleCheckout = async () => {
+        console.log('=== CHECKOUT STARTED ===');
+        
         if (!userEmail) {
+            console.error('❌ No email found');
             setError('Email address not found');
             return;
         }
 
+        console.log('✅ Email:', userEmail);
         setIsLoading(true);
         setError(null);
 
         try {
-            const priceId = billingCycle === 'monthly'
-                ? import.meta.env.VITE_STRIPE_PRICE_ID_MONTHLY
-                : import.meta.env.VITE_STRIPE_PRICE_ID_YEARLY;
+            const priceId = import.meta.env.VITE_STRIPE_PRICE_ID_ONETIME || 'price_1SU4uUCncGp3YgdwFxFeRvKo';
+            
+            console.log('✅ Price ID:', priceId);
 
             if (!priceId) {
                 throw new Error('Stripe configuration missing');
             }
 
-            // Stripe will replace {CHECKOUT_SESSION_ID} with the actual session ID
             const successUrl = `${window.location.origin}/#/checkout-success?session_id={CHECKOUT_SESSION_ID}`;
             const cancelUrl = `${window.location.origin}/#/upgrade`;
-            
-            console.log('🔗 Checkout URLs:');
-            console.log('  Success:', successUrl);
-            console.log('  Cancel:', cancelUrl);
-            console.log('  Price ID:', priceId);
-            console.log('  User Email:', userEmail);
 
-            await initiateCheckout(priceId, userEmail, successUrl, cancelUrl);
+            console.log('✅ Calling initiateCheckout...');
+            await initiateCheckout(priceId, userEmail, successUrl, cancelUrl, session?.user?.id || userProfile.id);
+            console.log('✅ initiateCheckout completed - should be redirecting');
+            
         } catch (err) {
-            console.error('Checkout error:', err);
-            setError(err instanceof Error ? err.message : 'Failed to start checkout');
+            console.error('❌ Checkout failed:', err);
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            setError(errorMsg);
             setIsLoading(false);
         }
     };
@@ -74,13 +74,13 @@ export const UpgradePage: React.FC<UpgradePageProps> = ({ setCurrentView, sessio
                     Upgrade naar Pro voor krachtige functies of blijf bij ons gratis abonnement.
                 </p>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Free Plan */}
-                    <div className={`bg-white p-8 rounded-lg shadow-md relative text-left flex flex-col ${!isPro ? 'border-2 border-teal-500' : 'border border-stone-200'}`}>
+                    <div className={`bg-white p-7 rounded-lg shadow-md relative text-left flex flex-col ${!isPro ? 'border-2 border-teal-500' : 'border border-stone-200'}`}>
                         {!isPro && <span className="absolute top-4 right-4 bg-teal-100 text-teal-700 text-xs font-bold uppercase px-3 py-1 rounded-full">Huidig Plan</span>}
-                        <h2 className="text-2xl font-bold text-zinc-800">Free</h2>
-                        <p className="text-4xl font-bold my-4 text-zinc-800">€0 <span className="text-base font-normal text-zinc-500">/ maand</span></p>
-                        <ul className="space-y-3 text-zinc-700 mb-8 flex-grow">
+                        <h2 className="text-xl font-bold text-zinc-800 mb-2">Free</h2>
+                        <p className="text-3xl font-bold my-4 text-zinc-800">€0 <span className="text-sm font-normal text-zinc-500">/ maand</span></p>
+                        <ul className="space-y-4 text-zinc-700 mb-10 flex-grow">
                             <li className="flex items-center"><CheckIcon /> 3 facturen in totaal</li>
                             <li className="flex items-center"><CheckIcon /> 5 klanten</li>
                             <li className="flex items-center"><CheckIcon /> Standaard templates</li>
@@ -94,42 +94,19 @@ export const UpgradePage: React.FC<UpgradePageProps> = ({ setCurrentView, sessio
                     </div>
 
                     {/* Pro Plan */}
-                    <div className={`bg-white p-8 rounded-lg shadow-md relative text-left flex flex-col ${isPro ? 'border-2 border-teal-500' : 'border border-stone-200'}`}>
-                        {isPro && <span className="absolute top-4 right-4 bg-teal-100 text-teal-700 text-xs font-bold uppercase px-3 py-1 rounded-full">Huidig Plan</span>}
-                        <h2 className="text-2xl font-bold text-teal-600">Pro</h2>
+                    <div className={`bg-gradient-to-br from-teal-50 to-white p-7 rounded-lg shadow-md relative text-left flex flex-col ${isPro ? 'border-2 border-teal-500' : 'border-2 border-teal-400'}`}>
+                        {isPro && <span className="absolute top-4 right-4 bg-teal-500 text-white text-xs font-bold uppercase px-3 py-1 rounded-full">Huidig Plan</span>}
                         
-                        <div className="flex justify-center my-4">
-                            <div className="p-1 bg-stone-200 rounded-full flex items-center space-x-1">
-                                <button
-                                    type="button"
-                                    onClick={() => setBillingCycle('monthly')}
-                                    className={`px-6 py-2 text-sm font-bold rounded-full transition-colors duration-300 ${billingCycle === 'monthly' ? 'bg-white text-teal-600 shadow' : 'text-zinc-600'}`}
-                                >
-                                    Maandelijks
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setBillingCycle('yearly')}
-                                    className={`px-6 py-2 text-sm font-bold rounded-full transition-colors duration-300 ${billingCycle === 'yearly' ? 'bg-white text-teal-600 shadow' : 'text-zinc-600'}`}
-                                >
-                                    Jaarlijks
-                                </button>
-                            </div>
-                        </div>
+                        <h2 className="text-xl font-bold text-teal-600 mb-2">Pro</h2>
 
-                        <div className="text-center">
-                            <p className="text-4xl font-bold text-zinc-800">
-                                {billingCycle === 'monthly' ? '€12,95' : '€10,79'}
-                                <span className="text-base font-normal text-zinc-500"> / maand</span>
+                        <div className="text-center my-4 bg-white p-4 rounded-lg shadow-sm">
+                            <p className="text-3xl font-bold text-teal-600">
+                                €39,50
                             </p>
-                            {billingCycle === 'yearly' && (
-                                <p className="text-sm text-zinc-500 mt-1">
-                                    €129,50 per jaar gefactureerd (bespaar 2 maanden)
-                                </p>
-                            )}
+                            <p className="text-xs text-zinc-500 mt-1 font-medium">eenmalig</p>
                         </div>
 
-                        <ul className="space-y-3 text-zinc-700 my-8 flex-grow">
+                        <ul className="space-y-3 text-zinc-700 my-6 flex-grow text-sm">
                             <li className="flex items-center"><CheckIcon /> <strong>Onbeperkt facturen & klanten</strong></li>
                             <li className="flex items-center"><CheckIcon /> Toegang tot alle templates & personalisatie</li>
                             <li className="flex items-center"><CheckIcon /> Uitgebreide rapportages en inzichten</li>
