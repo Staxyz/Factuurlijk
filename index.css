@@ -1,0 +1,14 @@
+/* Global font overrides */
+:root {
+  font-family: 'Manrope', sans-serif;
+}
+
+.font-serif {
+  font-family: 'Merriweather', 'Georgia', serif !important;
+}
+
+.font-mono {
+  font-family: 'IBM Plex Mono', 'Courier New', monospace !important;
+}
+
+

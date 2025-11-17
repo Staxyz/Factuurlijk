@@ -93,7 +93,7 @@ const App: React.FC = () => {
     isCheckoutRouteRef.current = isCheckoutRoute;
   }, [isCheckoutRoute]);
 
-  // Basic hash-based routing for Stripe checkout success (and other hash routes)
+  // Basic hash-based routing for checkout success (and other hash routes)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -130,6 +130,7 @@ const App: React.FC = () => {
   const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
   const [isSavingInvoice, setIsSavingInvoice] = useState(false);
   const isSavingRef = useRef(false); // Ref for synchronous check to prevent race conditions
+  const hasCompletedInitialFetch = useRef(false);
 
   // --- Function to create a new user profile ---
   const createUserProfile = useCallback(async (user: User): Promise<UserProfile | null> => {
@@ -186,8 +187,11 @@ const App: React.FC = () => {
   }, []);
 
   // --- NEW: Centralized Data Fetching Function ---
-  const fetchData = useCallback(async (user: User) => {
-    setLoading(true);
+  const fetchData = useCallback(async (user: User, options?: { forceLoader?: boolean }) => {
+    const shouldShowLoader = options?.forceLoader || !hasCompletedInitialFetch.current;
+    if (shouldShowLoader) {
+      setLoading(true);
+    }
     try {
       const invoicesPromise = supabase
         .from('invoices')
@@ -279,7 +283,10 @@ const App: React.FC = () => {
       setInvoices([]);
       setCustomers([]);
     } finally {
-      setLoading(false);
+      if (shouldShowLoader) {
+        setLoading(false);
+      }
+      hasCompletedInitialFetch.current = true;
     }
   }, [createUserProfile]);
 

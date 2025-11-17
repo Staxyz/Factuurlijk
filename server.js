@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-import Stripe from 'stripe';
 import dotenv from 'dotenv';
+import { createMollieClient } from '@mollie/api-client';
 import { createClient } from '@supabase/supabase-js';
 
 // Load environment variables from .env.local
@@ -9,15 +9,20 @@ dotenv.config({ path: '.env.local' });
 
 const app = express();
 
-// Validate that Stripe Secret Key is loaded
-const stripeSecretKey = process.env.VITE_STRIPE_SECRET_KEY;
-if (!stripeSecretKey) {
-  console.error('❌ VITE_STRIPE_SECRET_KEY is not set in environment variables!');
+// Validate that Mollie API Key is loaded
+const mollieApiKey =
+  process.env.MOLLIE_API_KEY ||
+  process.env.VITE_MOLLIE_API_KEY ||
+  process.env.MOLLIE_TEST_API_KEY;
+
+if (!mollieApiKey) {
+  console.error('❌ MOLLIE_API_KEY (or VITE_MOLLIE_API_KEY) is not set in environment variables!');
+  console.error('   Voeg MOLLIE_API_KEY toe aan .env.local (krijg hem in het Mollie dashboard).');
   process.exit(1);
 }
 
-const stripe = new Stripe(stripeSecretKey);
-console.log('✅ Stripe initialized with secret key');
+const mollieClient = createMollieClient({ apiKey: mollieApiKey });
+console.log('✅ Mollie client initialized with provided API key');
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://pprqqanddnixolmbwile.supabase.co';
 const supabaseServiceKeySource = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -45,18 +50,31 @@ if (supabaseServiceKey) {
 }
 
 // Middleware
+const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null;
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3005',
+  'http://localhost:5173',
+  process.env.FRONTEND_URL,
+  process.env.VITE_FRONTEND_URL,
+  process.env.VITE_VERCEL_URL,
+  vercelUrl,
+  'https://factuurlijk.vercel.app'
+].filter(Boolean);
+
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3005', 'http://localhost:5173', process.env.VITE_VERCEL_URL || ''],
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(express.json());
 
-const syncPaymentToSupabase = async (session) => {
+const syncPaymentToSupabase = async (payment) => {
   console.log('🔍 syncPaymentToSupabase called with:', {
     hasSupabaseAdmin: !!supabaseAdmin,
     hasServiceKey: !!supabaseServiceKey,
-    sessionId: session?.id,
-    paymentStatus: session?.payment_status
+    paymentId: payment?.id,
+    paymentStatus: payment?.status
   });
 
   if (!supabaseAdmin || !supabaseServiceKey) {
@@ -68,20 +86,38 @@ const syncPaymentToSupabase = async (session) => {
   }
 
   try {
-    console.log('🔄 Syncing payment to Supabase...', {
-      sessionId: session.id,
-      paymentStatus: session.payment_status,
-      metadata: session.metadata
+    console.log('🔄 Syncing Mollie payment to Supabase...', {
+      paymentId: payment.id,
+      paymentStatus: payment.status,
+      metadata: payment.metadata
     });
 
-    const supabaseUserIdFromMetadata = session.metadata?.supabase_user_id || null;
-    const customerEmail = session.customer_details?.email || session.customer_email || null;
-    const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : null;
+    const rawMetadata = payment.metadata;
+    let metadata = {};
+    if (typeof rawMetadata === 'string') {
+      try {
+        metadata = JSON.parse(rawMetadata);
+      } catch (parseError) {
+        console.warn('⚠️ Unable to parse metadata string, storing raw value');
+        metadata = { raw: rawMetadata };
+      }
+    } else if (rawMetadata && typeof rawMetadata === 'object') {
+      metadata = rawMetadata;
+    }
+    const supabaseUserIdFromMetadata =
+      metadata.supabase_user_id ||
+      metadata.supabaseUserId ||
+      null;
+    const customerEmail =
+      metadata.customer_email ||
+      metadata.email ||
+      metadata.user_email ||
+      null;
 
     console.log('📋 Payment details:', {
       supabaseUserIdFromMetadata,
       customerEmail,
-      paymentIntentId
+      amount: payment.amount
     });
 
     let targetUserId = supabaseUserIdFromMetadata;
@@ -105,8 +141,8 @@ const syncPaymentToSupabase = async (session) => {
       }
     }
 
-    // Update profile to Pro
-    if (targetUserId) {
+    // Update profile to Pro only for successful payments
+    if (targetUserId && payment.status === 'paid') {
       console.log('💾 Updating profile to Pro for user:', targetUserId);
       console.log('   Using Supabase URL:', supabaseUrl);
       
@@ -136,90 +172,52 @@ const syncPaymentToSupabase = async (session) => {
           console.warn('⚠️ Update returned no data - profile might not exist or ID mismatch');
         }
       }
-    } else {
-      console.warn('⚠️ No matching Supabase profile found for payment session', session.id);
-      console.warn('   Metadata:', JSON.stringify(session.metadata, null, 2));
+    } else if (!targetUserId) {
+      console.warn('⚠️ No matching Supabase profile found for payment', payment.id);
+      console.warn('   Metadata:', JSON.stringify(payment.metadata, null, 2));
       console.warn('   Customer email:', customerEmail);
       console.warn('   Possible reasons:');
-      console.warn('   1. supabase_user_id not in session metadata');
-      console.warn('   2. Email mismatch between Stripe and Supabase');
-      console.warn('   3. User profile not created in Supabase');
+      console.warn('   1. supabase_user_id niet meegestuurd in metadata');
+      console.warn('   2. Email mismatch tussen Mollie en Supabase');
+      console.warn('   3. User profile bestaat nog niet in Supabase');
+    } else {
+      console.log('ℹ️ Payment not marked as paid yet, skipping profile upgrade for now.');
     }
 
     // Log payment event
-    console.log('📝 Logging payment event to stripe_payment_events...');
+    console.log('📝 Logging payment event to mollie_payments...');
     const eventData = {
-      session_id: session.id,
-      payment_intent: paymentIntentId,
-      payment_status: session.payment_status,
-      amount_total: session.amount_total,
-      currency: session.currency,
+      payment_id: payment.id,
+      payment_status: payment.status,
+      amount_value: payment.amount?.value || null,
+      amount_currency: payment.amount?.currency || null,
+      description: payment.description || null,
       customer_email: customerEmail,
       supabase_user_id: targetUserId,
-      metadata: session.metadata || {}
+      metadata: metadata,
+      method: payment.method || null,
+      paid_at: payment.paidAt || null,
+      created_at: new Date().toISOString()
     };
     console.log('   Event data:', JSON.stringify(eventData, null, 2));
     
     const { error: logError, data: logData } = await supabaseAdmin
-      .from('stripe_payment_events')
+      .from('mollie_payments')
       .insert(eventData)
       .select();
 
     if (logError) {
-      console.error('❌ Unable to log stripe payment event:', logError);
+      console.error('❌ Unable to log Mollie payment event:', logError);
       console.error('   Error code:', logError.code);
       console.error('   Error message:', logError.message);
       console.error('   Error details:', JSON.stringify(logError, null, 2));
       console.error('   This might be due to:');
-      console.error('   1. stripe_payment_events table not existing');
+      console.error('   1. mollie_payments table not existing');
       console.error('   2. RLS policies blocking the insert');
       console.error('   3. Column type mismatch');
-    } else {
-      if (logData && logData.length > 0) {
-        console.log('✅ Payment event logged successfully!');
-        console.log('   Logged event:', JSON.stringify(logData[0], null, 2));
-      } else {
-        console.warn('⚠️ Insert returned no data');
-      }
-    }
-
-    // Upsert customer
-    if (session.customer && customerEmail) {
-      console.log('👤 Upserting stripe customer...');
-      const customerUpsertData = {
-        stripe_customer_id: session.customer,
-        supabase_user_id: targetUserId,
-        email: customerEmail,
-        last_payment_intent: paymentIntentId,
-        updated_at: new Date().toISOString()
-      };
-      console.log('   Customer data:', JSON.stringify(customerUpsertData, null, 2));
-      
-      const { error: customerError, data: customerData } = await supabaseAdmin
-        .from('stripe_customers')
-        .upsert(customerUpsertData, { onConflict: 'stripe_customer_id' })
-        .select();
-
-      if (customerError) {
-        console.error('❌ Unable to upsert stripe customer:', customerError);
-        console.error('   Error code:', customerError.code);
-        console.error('   Error message:', customerError.message);
-        console.error('   Error details:', JSON.stringify(customerError, null, 2));
-        console.error('   This might be due to:');
-        console.error('   1. stripe_customers table not existing');
-        console.error('   2. RLS policies blocking the upsert');
-      } else {
-        if (customerData && customerData.length > 0) {
-          console.log('✅ Stripe customer synced successfully!');
-          console.log('   Customer data:', JSON.stringify(customerData[0], null, 2));
-        } else {
-          console.warn('⚠️ Upsert returned no data');
-        }
-      }
-    } else {
-      console.log('⚠️ Skipping customer upsert - no customer ID or email');
-      console.log('   session.customer:', session.customer);
-      console.log('   customerEmail:', customerEmail);
+    } else if (logData && logData.length > 0) {
+      console.log('✅ Payment event logged successfully!');
+      console.log('   Logged event:', JSON.stringify(logData[0], null, 2));
     }
 
     return { supabaseUserId: targetUserId, customerEmail };
@@ -231,86 +229,101 @@ const syncPaymentToSupabase = async (session) => {
 };
 
 /**
- * Create Stripe Checkout Session
- * POST /api/create-checkout-session
+ * Create Mollie Payment
+ * POST /api/create-payment
  */
-app.post('/api/create-checkout-session', async (req, res) => {
+app.post('/api/create-payment', async (req, res) => {
   try {
-    const { priceId, userEmail, successUrl, cancelUrl, supabaseUserId } = req.body;
+    const {
+      amount,
+      description,
+      userEmail,
+      successUrl,
+      webhookUrl,
+      supabaseUserId,
+      metadata
+    } = req.body;
 
-    console.log('📝 Creating checkout session:', { priceId, userEmail });
+    console.log('📝 Creating Mollie payment:', { amount, userEmail, description });
 
-    // Validate inputs
-    if (!priceId || !userEmail || !successUrl || !cancelUrl) {
-      console.error('❌ Missing required fields:', { priceId, userEmail, successUrl, cancelUrl });
+    if (!amount?.value || !amount?.currency || !description || !successUrl || !userEmail) {
+      console.error('❌ Missing required fields for Mollie payment:', {
+        hasAmountValue: !!amount?.value,
+        hasAmountCurrency: !!amount?.currency,
+        hasDescription: !!description,
+        hasSuccessUrl: !!successUrl,
+        hasEmail: !!userEmail
+      });
       return res.status(400).json({
-        error: 'Missing required fields: priceId, userEmail, successUrl, cancelUrl'
+        error: 'Fields amount.value, amount.currency, description, successUrl en userEmail zijn verplicht.'
       });
     }
 
-    // Create checkout session
-    console.log('🔄 Calling Stripe API to create session...');
-    const session = await stripe.checkout.sessions.create({
-      customer_email: userEmail,
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
-      mode: 'payment',
-      success_url: successUrl.replace('{CHECKOUT_SESSION_ID}', '{CHECKOUT_SESSION_ID}'), // Stripe will replace this
-      cancel_url: cancelUrl,
-      metadata: {
-        supabase_user_id: supabaseUserId || '',
-        product_id: priceId
+    const normalizeAmountValue = (value) => {
+      if (typeof value === 'number') return value.toFixed(2);
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) {
+        throw new Error('Amount value must be a valid number');
       }
-    });
+      return parsed.toFixed(2);
+    };
 
-    console.log('✅ Checkout session created:', session.id);
-    console.log('📋 Success URL will be:', session.success_url);
-    res.json({ sessionId: session.id, url: session.url });
-  } catch (error) {
-    console.error('❌ Error creating checkout session:', error);
-    res.status(500).json({
-      error: error instanceof Error ? error.message : 'Internal server error'
-    });
-  }
-});
+    const normalizedAmount = {
+      value: normalizeAmountValue(amount.value),
+      currency: amount.currency
+    };
 
-/**
- * Create Stripe Payment Link
- * POST /api/create-payment-link
- */
-app.post('/api/create-payment-link', async (req, res) => {
-  try {
-    const { priceId } = req.body;
+    // Mollie uses the default profile automatically if profileId is omitted
+    const paymentPayload = {
+      amount: normalizedAmount,
+      description,
+      redirectUrl: successUrl,
+      metadata: {
+        ...(metadata || {}),
+        supabase_user_id: supabaseUserId || null,
+        customer_email: userEmail
+      }
+    };
 
-    console.log('📝 Creating payment link for price:', priceId);
-
-    // Validate input
-    if (!priceId) {
-      console.error('❌ Missing required field: priceId');
-      return res.status(400).json({
-        error: 'Missing required field: priceId'
-      });
+    // Only add webhookUrl if it's a valid HTTPS URL (not for localhost testing)
+    const webhookUrlEnv = process.env.MOLLIE_WEBHOOK_URL || process.env.VITE_MOLLIE_WEBHOOK_URL;
+    if (webhookUrlEnv && webhookUrlEnv.startsWith('https://')) {
+      paymentPayload.webhookUrl = webhookUrlEnv;
+      console.log('📡 Webhook URL configured:', webhookUrlEnv);
+    } else {
+      console.log('ℹ️  Webhook URL skipped (localhost/testing mode)');
     }
 
-    // Create payment link
-    console.log('🔄 Calling Stripe API to create payment link...');
-    const paymentLink = await stripe.paymentLinks.create({
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
-    });
+    console.log('🔄 Calling Mollie API to create payment...');
+    console.log('📦 Payment payload:', JSON.stringify(paymentPayload, null, 2));
+    
+    try {
+      const payment = await mollieClient.payments.create(paymentPayload);
 
-    console.log('✅ Payment link created:', paymentLink.url);
-    res.json({ paymentLinkUrl: paymentLink.url });
+      const checkoutUrl = payment?._links?.checkout?.href;
+      if (!checkoutUrl) {
+        throw new Error('Mollie returned no checkout URL for this payment');
+      }
+
+      console.log('✅ Mollie payment created:', payment.id);
+      res.json({
+        paymentId: payment.id,
+        checkoutUrl,
+        status: payment.status
+      });
+    } catch (mollieError: any) {
+      console.error('❌ Mollie API Error Details:');
+      console.error('   Status:', mollieError?.status);
+      console.error('   Title:', mollieError?.title);
+      console.error('   Detail:', mollieError?.detail);
+      console.error('   Field:', mollieError?.field);
+      console.error('   Full error:', JSON.stringify(mollieError, null, 2));
+      
+      const errorMessage = mollieError?.detail || mollieError?.title || mollieError?.message || 'Unknown Mollie error';
+      throw new Error(`Mollie API Error: ${errorMessage}`);
+    }
   } catch (error) {
-    console.error('❌ Error creating payment link:', error);
+    console.error('❌ Error creating Mollie payment:', error);
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Internal server error'
     });
@@ -351,67 +364,69 @@ app.post('/api/admin/reset-plan', async (req, res) => {
 });
 
 /**
- * Verify Checkout Session Status
- * POST /api/verify-session
+ * Verify Mollie Payment Status
+ * POST /api/verify-payment
  * 
- * This endpoint verifies that a Stripe checkout session was completed successfully.
+ * This endpoint verifies that a Mollie payment was completed successfully.
  * IMPORTANT: Only upgrade users to Pro if this returns status 'complete'
  */
-app.post('/api/verify-session', async (req, res) => {
+app.post('/api/verify-payment', async (req, res) => {
   try {
-    const { sessionId } = req.body;
+    const { paymentId } = req.body;
 
-    console.log('🔍 Verifying checkout session:', sessionId);
+    console.log('🔍 Verifying Mollie payment:', paymentId);
 
-    // Validate input
-    if (!sessionId) {
-      console.error('❌ Missing sessionId');
+    if (!paymentId) {
+      console.error('❌ Missing paymentId');
       return res.status(400).json({
-        error: 'Missing required field: sessionId',
+        error: 'Missing required field: paymentId',
         status: 'invalid'
       });
     }
 
-    // Retrieve session from Stripe
-    console.log('🔄 Fetching session from Stripe...');
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    console.log('🔄 Fetching payment from Mollie...');
+    const payment = await mollieClient.payments.get(paymentId);
 
-    console.log('📊 Session retrieved:', {
-      id: session.id,
-      status: session.payment_status,
-      customer_email: session.customer_email,
-      subscription: session.subscription
+    console.log('📊 Payment retrieved:', {
+      id: payment.id,
+      status: payment.status,
+      method: payment.method,
+      amount: payment.amount
     });
 
-    // Check if payment is paid (not just initiated)
-    const isPaid = session.payment_status === 'paid';
-    const isProcessing = session.payment_status === 'unpaid'; // Payment initiated but not confirmed yet
+    const isPaid = payment.status === 'paid';
+    const isProcessing = ['authorized', 'pending', 'open'].includes(payment.status || '');
 
     if (!isPaid && !isProcessing) {
-      console.error('❌ Payment not successful. Status:', session.payment_status);
+      console.error('❌ Payment not successful. Status:', payment.status);
       return res.json({
         status: 'failed',
-        payment_status: session.payment_status,
+        payment_status: payment.status,
         message: 'Payment was not completed successfully'
       });
     }
 
-    console.log('✅ Session verified successfully! Payment status:', session.payment_status);
+    console.log('✅ Payment verified successfully! Status:', payment.status);
 
-    const syncResult = await syncPaymentToSupabase(session);
+    const syncResult = await syncPaymentToSupabase(payment);
 
     res.json({
-      status: 'complete',
-      payment_status: session.payment_status,
-      customer_email: session.customer_email,
-      supabase_user_id: syncResult.supabaseUserId || session.metadata?.supabase_user_id || null,
-      subscription: session.subscription,
-      isPaid: isPaid,
-      synced: !!syncResult.supabaseUserId,
-      message: syncResult.supabaseUserId ? 'Payment completed and profile updated' : 'Payment completed. No matching profile found to upgrade.'
+      status: isPaid ? 'complete' : 'processing',
+      payment_status: payment.status,
+      amount: payment.amount,
+      payment_id: payment.id,
+      customer_email: syncResult.customerEmail,
+      supabase_user_id: syncResult.supabaseUserId || null,
+      isPaid,
+      synced: !!syncResult.supabaseUserId && isPaid,
+      message: isPaid
+        ? (syncResult.supabaseUserId
+          ? 'Payment completed and profile updated'
+          : 'Payment completed. No matching profile found to upgrade.')
+        : 'Payment processing, please retry shortly.'
     });
   } catch (error) {
-    console.error('❌ Error verifying session:', error);
+    console.error('❌ Error verifying Mollie payment:', error);
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Internal server error',
       status: 'error'
@@ -424,28 +439,28 @@ app.post('/api/verify-session', async (req, res) => {
  */
 app.post('/api/sync-plan', async (req, res) => {
   try {
-    const { sessionId } = req.body;
+    const { paymentId } = req.body;
 
-    if (!sessionId) {
-      return res.status(400).json({ error: 'sessionId is required' });
+    if (!paymentId) {
+      return res.status(400).json({ error: 'paymentId is required' });
     }
 
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const payment = await mollieClient.payments.get(paymentId);
 
-    if (session.payment_status !== 'paid') {
+    if (payment.status !== 'paid') {
       return res.status(400).json({
-        error: `Payment not completed (status: ${session.payment_status})`,
-        payment_status: session.payment_status
+        error: `Payment not completed (status: ${payment.status})`,
+        payment_status: payment.status
       });
     }
 
-    const syncResult = await syncPaymentToSupabase(session);
+    const syncResult = await syncPaymentToSupabase(payment);
 
     res.json({
       synced: !!syncResult.supabaseUserId,
       supabase_user_id: syncResult.supabaseUserId,
-      session_id: session.id,
-      payment_status: session.payment_status,
+      payment_id: payment.id,
+      payment_status: payment.status,
       message: syncResult.supabaseUserId
         ? 'Account bijgewerkt naar Pro.'
         : 'Betaling gelogd, maar geen profiel gevonden om te upgraden.'
@@ -490,15 +505,9 @@ app.get('/api/debug/supabase', async (req, res) => {
       .select('id, email, plan')
       .limit(5);
 
-    // Test 2: Check if stripe_payment_events table exists
-    const { data: events, error: eventsError } = await supabaseAdmin
-      .from('stripe_payment_events')
-      .select('*')
-      .limit(5);
-
-    // Test 3: Check if stripe_customers table exists
-    const { data: customers, error: customersError } = await supabaseAdmin
-      .from('stripe_customers')
+    // Test 2: Check if mollie_payments table exists
+    const { data: payments, error: paymentsError } = await supabaseAdmin
+      .from('mollie_payments')
       .select('*')
       .limit(5);
 
@@ -512,17 +521,11 @@ app.get('/api/debug/supabase', async (req, res) => {
           count: profiles?.length || 0,
           sample: profiles?.slice(0, 2)
         },
-        stripe_payment_events: {
-          accessible: !eventsError,
-          error: eventsError?.message,
-          count: events?.length || 0,
-          sample: events?.slice(0, 2)
-        },
-        stripe_customers: {
-          accessible: !customersError,
-          error: customersError?.message,
-          count: customers?.length || 0,
-          sample: customers?.slice(0, 2)
+        mollie_payments: {
+          accessible: !paymentsError,
+          error: paymentsError?.message,
+          count: payments?.length || 0,
+          sample: payments?.slice(0, 2)
         }
       }
     });
@@ -537,6 +540,6 @@ app.get('/api/debug/supabase', async (req, res) => {
 // Start server
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`✅ Stripe API server running on http://localhost:${PORT}`);
+  console.log(`✅ Mollie API server running on http://localhost:${PORT}`);
 });
 

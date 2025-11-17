@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import type { View } from '../types';
 import { supabase } from '../supabaseClient';
+import { buildApiUrl } from '../apiConfig';
+import { clearStoredPaymentId, getStoredPaymentId } from '../services/mollieService';
 
 interface CheckoutSuccessPageProps {
   setCurrentView: (view: View) => void;
@@ -14,56 +16,120 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
   const [isSuccess, setIsSuccess] = useState(false);
   const [countdown, setCountdown] = useState(10);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
-  const [sessionStatus, setSessionStatus] = useState<string | null>(null);
-
-  const startRedirectCountdown = () => {
-    let remainingTime = 10;
-    setCountdown(remainingTime);
-
-    const timer = setInterval(() => {
-      remainingTime -= 1;
-      setCountdown(remainingTime);
-
-      if (remainingTime <= 0) {
-        clearInterval(timer);
-        console.log('🚀 Redirecting to dashboard...');
-        setCurrentView('dashboard');
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  };
+  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
 
   useEffect(() => {
-    let stopCountdown: (() => void) | undefined;
-
     const processCheckout = async () => {
       try {
         console.log('🔍 Starting checkout processing...');
         
-        // Extract session ID from URL
+        // Determine payment reference from URL/hash or storage
         const urlParams = new URLSearchParams(window.location.search);
         const hash = window.location.hash || '';
         const hashQuery = hash.includes('?') ? hash.split('?')[1] : '';
         const hashParams = new URLSearchParams(hashQuery);
 
-        const sessionId =
-          urlParams.get('session_id') ||
-          hashParams.get('session_id');
+        // Check for payment_id from Mollie redirect
+        const paymentIdFromUrl =
+          urlParams.get('payment_id') ||
+          hashParams.get('payment_id') ||
+          urlParams.get('paymentId') ||
+          hashParams.get('paymentId');
+
+        const storedPaymentId = getStoredPaymentId();
+
+        const paymentId = paymentIdFromUrl || storedPaymentId;
         
-        if (!sessionId) {
-          console.error('❌ No session ID found in URL');
-          throw new Error('Session ID niet gevonden. Kan betaling niet verifiëren.');
+        // Check if this is a Payment Link return (might not have payment_id)
+        const paymentSource = sessionStorage.getItem('factuurlijk:paymentSource');
+        const isPaymentLinkReturn = paymentSource === 'templates-page' || paymentSource === 'upgrade-page';
+        const storedUserId = sessionStorage.getItem('factuurlijk:paymentUserId');
+        
+        if (!paymentId && !isPaymentLinkReturn) {
+          console.error('❌ No payment ID found in URL or storage');
+          throw new Error('Payment ID niet gevonden. Start de upgrade opnieuw zodat we je betaling kunnen verifiëren.');
+        }
+        
+        // If Payment Link return without payment_id, upgrade directly based on stored user info
+        if (!paymentId && isPaymentLinkReturn && storedUserId) {
+          console.log('📝 Payment Link return detected, upgrading user directly...');
+          const { data: sessionData } = await supabase.auth.getSession();
+          const currentUser = sessionData.session?.user;
+          
+          if (currentUser && currentUser.id === storedUserId) {
+            console.log('✅ User verified, upgrading to Pro...');
+            
+            // Log payment to mollie_payments table
+            const storedUserEmail = sessionStorage.getItem('factuurlijk:paymentUserEmail');
+            try {
+              const { error: logError } = await supabase
+                .from('mollie_payments')
+                .insert({
+                  payment_id: `payment_link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  payment_status: 'paid',
+                  amount_value: 39.50,
+                  amount_currency: 'EUR',
+                  description: 'Factuurlijk Pro upgrade via Payment Link',
+                  customer_email: storedUserEmail || currentUser.email,
+                  supabase_user_id: currentUser.id,
+                  metadata: {
+                    source: paymentSource,
+                    payment_method: 'payment_link'
+                  },
+                  paid_at: new Date().toISOString()
+                });
+              
+              if (logError) {
+                console.warn('⚠️ Could not log payment to database:', logError);
+              } else {
+                console.log('✅ Payment logged to database');
+              }
+            } catch (logErr) {
+              console.warn('⚠️ Error logging payment:', logErr);
+            }
+            
+            // Upgrade user to Pro
+            const { error: updateError, data: updateData } = await supabase
+              .from('profiles')
+              .update({ 
+                plan: 'pro', 
+                updated_at: new Date().toISOString() 
+              })
+              .eq('id', currentUser.id)
+              .select();
+            
+            if (updateError) {
+              console.error('❌ Error upgrading profile:', updateError);
+              throw updateError;
+            }
+            
+            console.log('✅ Profile upgraded to Pro:', updateData);
+            
+            // Clean up sessionStorage
+            sessionStorage.removeItem('factuurlijk:paymentSource');
+            sessionStorage.removeItem('factuurlijk:paymentUserId');
+            sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+            
+            setCountdown(5);
+            setIsSuccess(true);
+            setIsProcessing(false);
+            if (onUpgradeSuccess) {
+              await onUpgradeSuccess().catch(err => console.error('Error refreshing profile:', err));
+            }
+            return;
+          } else {
+            throw new Error('Gebruiker verificatie mislukt. Log opnieuw in en probeer het opnieuw.');
+          }
         }
 
-        console.log('📝 Session ID extracted:', sessionId);
+        console.log('📝 Payment ID resolved:', paymentId);
 
         const verifyPaymentWithRetry = async (attempt = 1, maxAttempts = 6): Promise<any> => {
           console.log(`🔄 Verifying payment (attempt ${attempt}/${maxAttempts})`);
-          const response = await fetch('http://localhost:3001/api/verify-session', {
+          const response = await fetch(buildApiUrl('/api/verify-payment'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId })
+            body: JSON.stringify({ paymentId })
           });
 
           if (!response.ok) {
@@ -95,7 +161,7 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
 
         const verificationResult = await verifyPaymentWithRetry();
         console.log('📊 Verification result:', verificationResult);
-        setSessionStatus(verificationResult.status);
+        setVerificationStatus(verificationResult.status);
         setPaymentStatus(verificationResult.payment_status);
 
         const paymentCompleted = verificationResult.status === 'complete' && (verificationResult.payment_status === 'paid' || verificationResult.isPaid);
@@ -123,10 +189,10 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
           user = await getSupabaseUser();
         } catch (userErr) {
           console.warn('⚠️ Supabase user session not found, attempting server-side sync...', userErr);
-          const fallbackResponse = await fetch('http://localhost:3001/api/sync-plan', {
+          const fallbackResponse = await fetch(buildApiUrl('/api/sync-plan'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId })
+            body: JSON.stringify({ paymentId })
           });
 
           if (!fallbackResponse.ok) {
@@ -135,12 +201,13 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
           }
 
           console.log('✅ Server-side sync completed');
+          clearStoredPaymentId();
+          setCountdown(10);
           setIsSuccess(true);
           setIsProcessing(false);
           if (onUpgradeSuccess) {
             await onUpgradeSuccess().catch(err => console.error('Error refreshing profile:', err));
           }
-          stopCountdown = startRedirectCountdown();
           return;
         }
 
@@ -163,25 +230,40 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
         }
 
         console.log('✅ User upgraded to Pro successfully!', data);
+        clearStoredPaymentId();
+        setCountdown(10);
         setIsSuccess(true);
         if (onUpgradeSuccess) {
           await onUpgradeSuccess().catch(err => console.error('Error refreshing profile:', err));
         }
         setIsProcessing(false);
-
-        stopCountdown = startRedirectCountdown();
       } catch (err) {
         console.error('❌ Checkout processing error:', err);
+        clearStoredPaymentId();
         setError(err instanceof Error ? err.message : 'Fout bij het verwerken van de betaling');
         setIsProcessing(false);
       }
     };
 
     processCheckout();
-    return () => {
-      if (stopCountdown) stopCountdown();
-    };
   }, [setCurrentView, onUpgradeSuccess]);
+
+  useEffect(() => {
+    if (!isSuccess) return;
+    if (countdown <= 0) {
+      console.log('🚀 Redirecting to dashboard...');
+      // Clean up URL before redirect
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+      setCurrentView('dashboard');
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCountdown(prev => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [isSuccess, countdown, setCurrentView]);
 
   if (error) {
     return (
@@ -189,8 +271,8 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
         <div className="text-center bg-red-50 p-8 rounded-lg border border-red-200 max-w-md">
           <h1 className="text-2xl font-bold text-red-700 mb-4">⚠️ Fout!</h1>
           <p className="text-red-600 mb-4">{error}</p>
-          {sessionStatus && (
-            <p className="text-sm text-red-500 mb-2">Session status: {sessionStatus}</p>
+          {verificationStatus && (
+            <p className="text-sm text-red-500 mb-2">Verificatie status: {verificationStatus}</p>
           )}
           {paymentStatus && (
             <p className="text-sm text-red-500 mb-4">Betaalstatus: {paymentStatus}</p>
@@ -212,11 +294,23 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
         <div className="text-center bg-green-50 p-8 rounded-lg border border-green-200 max-w-md">
           <h1 className="text-3xl font-bold text-green-700 mb-4">✅ Succes!</h1>
           <p className="text-green-600 mb-2 font-semibold">Bedankt voor je upgrade naar Pro! 🎉</p>
-          <p className="text-zinc-600 text-sm">Je account is nu geupgrade naar Pro</p>
-          <div className="mt-6 bg-white p-4 rounded-lg border border-green-200">
+          <p className="text-zinc-600 text-sm mb-4">Je account is nu geupgrade naar Pro</p>
+          <div className="mt-6 bg-white p-4 rounded-lg border border-green-200 mb-4">
             <p className="text-teal-600 font-bold text-lg">Automatisch doorgestuurd naar dashboard...</p>
             <p className="text-teal-600 text-sm mt-2">Over {countdown} seconden</p>
           </div>
+          <button
+            onClick={() => {
+              // Clean up URL
+              if (typeof window !== 'undefined') {
+                window.history.replaceState({}, document.title, window.location.pathname);
+              }
+              setCurrentView('dashboard');
+            }}
+            className="w-full bg-teal-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-teal-700 transition-colors"
+          >
+            Direct naar dashboard
+          </button>
         </div>
       </div>
     );

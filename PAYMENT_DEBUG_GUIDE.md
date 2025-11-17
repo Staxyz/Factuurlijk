@@ -76,6 +76,23 @@ Zorg dat `supabase_user_id` in de Stripe session metadata wordt meegegeven (dit 
 
 ---
 
+### **5. Frontend gebruikt nog `http://localhost:3001` in productie**
+De browser kan de backend alleen bereiken via een publiek domein. Als je app op Vercel staat maar `VITE_API_BASE_URL` niet is ingesteld, dan probeert de frontend nog steeds `http://localhost:3001/...` aan te roepen → dat bestaat niet online.
+
+**Fix:**
+1. Voeg een nieuwe env var toe aan `.env.local`:
+   ```env
+   VITE_API_BASE_URL=http://localhost:3001
+   ```
+2. Voeg op Vercel (of waar je production frontend draait) **dezelfde variabele** toe maar met je publieke backend URL, bijv.:
+   ```
+   VITE_API_BASE_URL=https://factuurlijk.vercel.app
+   ```
+   of het domein waar jouw Express-server draait.
+3. Deploy opnieuw. De frontend gebruikt nu automatisch de juiste URL per omgeving (lokaal vs. productie).
+
+---
+
 ## **Diagnose Stappen**
 
 ### **Stap 1: Check Server Logs**

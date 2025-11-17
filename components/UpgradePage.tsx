@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import type { View, UserProfile } from '../types';
 import type { Session } from '@supabase/supabase-js';
-import { initiateCheckout } from '../services/stripeService';
 
 interface UpgradePageProps {
     setCurrentView: (view: View) => void;
@@ -36,23 +35,23 @@ export const UpgradePage: React.FC<UpgradePageProps> = ({ setCurrentView, sessio
         setError(null);
 
         try {
-            const priceId = import.meta.env.VITE_STRIPE_PRICE_ID_ONETIME || 'price_1SU4uUCncGp3YgdwFxFeRvKo';
+            // Use Mollie Payment Link directly (no API call needed)
+            const paymentLink = import.meta.env.VITE_MOLLIE_PAYMENT_LINK || 'https://payment-links.mollie.com/payment/G9QCA98NPsAFM65BU8fsQ';
             
-            console.log('✅ Price ID:', priceId);
-
-            if (!priceId) {
-                throw new Error('Stripe configuration missing');
+            console.log('🔄 Redirecting to Mollie Payment Link:', paymentLink);
+            
+            // Store user info in sessionStorage for after payment return
+            if (typeof window !== 'undefined') {
+                sessionStorage.setItem('factuurlijk:paymentSource', 'upgrade-page');
+                sessionStorage.setItem('factuurlijk:paymentUserId', session?.user?.id || userProfile.id);
+                sessionStorage.setItem('factuurlijk:paymentUserEmail', userEmail);
             }
-
-            const successUrl = `${window.location.origin}/#/checkout-success?session_id={CHECKOUT_SESSION_ID}`;
-            const cancelUrl = `${window.location.origin}/#/upgrade`;
-
-            console.log('✅ Calling initiateCheckout...');
-            await initiateCheckout(priceId, userEmail, successUrl, cancelUrl, session?.user?.id || userProfile.id);
-            console.log('✅ initiateCheckout completed - should be redirecting');
+            
+            // Redirect to Mollie Payment Link
+            window.location.href = paymentLink;
             
         } catch (err) {
-            console.error('❌ Checkout failed:', err);
+            console.error('❌ Mollie payment link redirect failed:', err);
             const errorMsg = err instanceof Error ? err.message : String(err);
             setError(errorMsg);
             setIsLoading(false);

@@ -172,6 +172,64 @@ const fontClasses: Record<TemplateFont, string> = {
   mono: 'font-mono',
 };
 
+interface BusinessInfoStripProps {
+  userProfile: UserProfile;
+  className?: string;
+  variant?: 'light' | 'dark';
+  align?: 'left' | 'center' | 'right';
+  primaryColor?: string;
+}
+
+const BusinessInfoStrip: React.FC<BusinessInfoStripProps> = ({
+  userProfile,
+  className = '',
+  variant = 'light',
+  align = 'left',
+  primaryColor,
+}) => {
+  const info = [
+    { label: 'BTW', value: userProfile.btw_number || '—' },
+    { label: 'KvK', value: userProfile.kvk_number || '—' },
+    { label: 'IBAN', value: userProfile.iban || '—' },
+  ];
+
+  const baseText =
+    variant === 'dark' ? 'text-white/95' : 'text-gray-800';
+  const labelClass =
+    variant === 'dark' ? 'text-white font-semibold' : 'text-gray-700 font-semibold';
+  const valueClass =
+    variant === 'dark' ? 'text-white/90' : 'text-gray-900';
+
+  const alignClass =
+    align === 'center'
+      ? 'justify-center text-center'
+      : align === 'right'
+      ? 'justify-end text-right'
+      : 'justify-start text-left';
+
+  return (
+    <div
+      className={`flex flex-wrap gap-x-8 gap-y-2 text-[0.95em] leading-tight ${baseText} ${alignClass} ${className}`}
+    >
+      {info.map(({ label, value }) => (
+        <div key={label} className="flex items-baseline gap-1 whitespace-nowrap">
+          <span className={`${labelClass}`}>{label}:</span>
+          <span
+            className={valueClass}
+            style={
+              primaryColor && variant === 'light'
+                ? { color: primaryColor }
+                : undefined
+            }
+          >
+            {value}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const renderers: Record<TemplateStyle, React.FC<InvoicePreviewProps>> = {
   minimalist: MinimalistTemplate,
   corporate: CorporateTemplate,
@@ -220,7 +278,7 @@ function MinimalistTemplate(props: InvoicePreviewProps) {
           </div>
         </header>
 
-        <section className="grid grid-cols-3 gap-4 mt-4">
+        <section className="grid grid-cols-3 gap-6 md:gap-8 mt-4">
           <div className={`min-w-0 ${emailSectionFontSize}`}>
             <h3 className="font-semibold text-gray-500 uppercase mb-1">Van</h3>
             <p className="font-semibold break-words">{userProfile.name}</p>
@@ -245,6 +303,11 @@ function MinimalistTemplate(props: InvoicePreviewProps) {
                   <p className="whitespace-nowrap"><span className="font-semibold">Datum:</span> {invoiceDate}</p>
                   <p className="whitespace-nowrap"><span className="font-semibold">Vervaldatum:</span> {dueDate}</p>
               </div>
+              <BusinessInfoStrip
+                userProfile={userProfile}
+                className="mt-3"
+                align="right"
+              />
           </div>
         </section>
 
@@ -299,9 +362,6 @@ function MinimalistTemplate(props: InvoicePreviewProps) {
 
           <footer className="mt-8 pt-4 border-t border-gray-200 text-gray-600">
                <p className="whitespace-pre-line mb-4 break-words">{footerText}</p>
-               <p><span className="font-semibold">IBAN:</span> {userProfile.iban}</p>
-               <p><span className="font-semibold">KvK:</span> {userProfile.kvk_number}</p>
-               <p><span className="font-semibold">BTW:</span> {userProfile.btw_number}</p>
           </footer>
         </div>
       </div>
@@ -342,13 +402,11 @@ function CorporateTemplate(props: InvoicePreviewProps) {
             </div>
         </header>
 
-        <section className="grid grid-cols-3 gap-4 mt-4">
+        <section className="grid grid-cols-3 gap-6 md:gap-8 mt-4">
           <div className={`min-w-0 ${emailSectionFontSize}`}>
             <h3 className="font-bold text-gray-600 uppercase mb-1">Van</h3>
             <p className="font-semibold break-words">{userProfile.name}</p>
             <p className="break-words">{userProfile.address}</p>
-            {userProfile.kvk_number && <p className="break-words">KvK: {userProfile.kvk_number}</p>}
-            {userProfile.btw_number && <p className="break-words">BTW: {userProfile.btw_number}</p>}
           </div>
           <div className={`min-w-0 ${emailSectionFontSize}`}>
             <h3 className="font-bold text-gray-600 uppercase mb-1">Factuur aan</h3>
@@ -363,6 +421,12 @@ function CorporateTemplate(props: InvoicePreviewProps) {
                   <p className="whitespace-nowrap"><span className="font-semibold">Datum:</span> {invoiceDate}</p>
                   <p className="whitespace-nowrap"><span className="font-semibold">Vervaldatum:</span> {dueDate}</p>
               </div>
+              <BusinessInfoStrip
+                userProfile={userProfile}
+                className="mt-3"
+                align="right"
+                primaryColor={primaryColor}
+              />
           </div>
         </section>
 
@@ -460,7 +524,7 @@ function CreativeTemplate(props: InvoicePreviewProps) {
         </header>
         
         <main className={`${pagePaddingClass} flex-grow flex flex-col`}>
-            <section className="grid grid-cols-3 gap-4">
+            <section className="grid grid-cols-3 gap-6 md:gap-8">
                 <div className={`min-w-0 ${emailSectionFontSize}`}>
                   <h3 className="font-bold text-gray-500 uppercase mb-1 text-[0.8em] tracking-wider">Van</h3>
                   <p className="font-semibold break-words">{userProfile.name}</p>
@@ -478,6 +542,11 @@ function CreativeTemplate(props: InvoicePreviewProps) {
                     <p className="whitespace-nowrap"><span className="font-semibold">Factuurnr:</span> {invoice.invoice_number}</p>
                     <p className="whitespace-nowrap"><span className="font-semibold">Datum:</span> {invoiceDate}</p>
                     <p className="whitespace-nowrap"><span className="font-semibold">Vervaldatum:</span> {dueDate}</p>
+                    <BusinessInfoStrip
+                      userProfile={userProfile}
+                      className="mt-3"
+                      align="right"
+                    />
                 </div>
             </section>
 
@@ -564,15 +633,13 @@ function SidebarTemplate(props: InvoicePreviewProps) {
                 <h1 className="text-[1em] font-bold break-words">{userProfile.name}</h1>
             )}
           </div>
-          <div className={`space-y-4 ${emailSectionFontSize}`}>
+          <div className={`space-y-6 ${emailSectionFontSize}`}>
              <div>
               <h3 className="font-bold text-gray-500 uppercase tracking-wider mb-1">Van</h3>
               <p className="font-bold break-words">{userProfile.name}</p>
               <p className="break-words">{userProfile.address}</p>
               <p className="whitespace-nowrap">{userProfile.email}</p>
               {userProfile.phone_number && <p className="break-words">{userProfile.phone_number}</p>}
-              {userProfile.kvk_number && <p className="break-words">KvK: {userProfile.kvk_number}</p>}
-              {userProfile.btw_number && <p className="break-words">BTW: {userProfile.btw_number}</p>}
             </div>
             <div>
               <h3 className="font-bold text-gray-500 uppercase tracking-wider mb-1">Aan</h3>
@@ -585,15 +652,17 @@ function SidebarTemplate(props: InvoicePreviewProps) {
         </div>
         <div className="text-gray-600">
             <h3 className="font-bold text-gray-500 uppercase tracking-wider mb-1">Betaling</h3>
-            <p className="break-words">IBAN: {userProfile.iban}</p>
+            <BusinessInfoStrip userProfile={userProfile} className="mb-2" />
             <p className="whitespace-pre-line break-words mt-2">{footerText}</p>
         </div>
       </aside>
 
       {/* Main Content */}
       <main className={`w-2/3 ${pagePaddingClass} flex flex-col min-w-0`}>
-        <header className="flex justify-between items-start mb-6 gap-4">
-          <h2 className="text-[1.2em] font-bold text-gray-800 break-words min-w-0">Factuur</h2>
+        <header className="flex justify-between items-start mb-4 gap-6">
+          <h2 className="text-[1.25em] font-bold text-gray-800 uppercase tracking-wide whitespace-nowrap">
+            Factuur
+          </h2>
           <div className={`flex-shrink-0 ${dateSectionFontSize}`}>
             <div className="flex flex-col items-end">
               <p className="whitespace-nowrap"><span className="font-semibold">Factuurnr:</span> {invoice.invoice_number}</p>
@@ -603,7 +672,7 @@ function SidebarTemplate(props: InvoicePreviewProps) {
           </div>
         </header>
 
-        <section className="flex-grow min-h-0 flex flex-col overflow-hidden">
+        <section className="flex-grow min-h-0 flex flex-col overflow-hidden mt-2">
             <div className="flex-1 min-h-0 overflow-y-auto">
             <table className="w-full text-left table-fixed">
                 <thead className="sticky top-0 bg-white z-10">
@@ -689,7 +758,7 @@ function ElegantTemplate(props: InvoicePreviewProps) {
                 )}
             </header>
             
-            <section className="grid grid-cols-3 gap-4 mt-6 pb-4 border-b">
+            <section className="grid grid-cols-3 gap-6 md:gap-8 mt-6 pb-4 border-b">
                  <div className={`min-w-0 ${emailSectionFontSize}`}>
                   <h3 className="font-bold text-gray-600 uppercase mb-1">Van</h3>
                   <p className="font-semibold break-words">{userProfile.name}</p>
@@ -710,6 +779,7 @@ function ElegantTemplate(props: InvoicePreviewProps) {
                         <p className="whitespace-nowrap">Datum: {invoiceDate}</p>
                         <p className="whitespace-nowrap">Vervaldatum: {dueDate}</p>
                     </div>
+                    <BusinessInfoStrip userProfile={userProfile} className="mt-3" align="right" />
                 </div>
             </section>
 
@@ -804,13 +874,11 @@ function WaveTemplate(props: InvoicePreviewProps) {
         </header>
 
         <main className={`${pageHeaderMainPaddingClass} flex-grow flex flex-col`}>
-            <section className="grid grid-cols-3 gap-4">
+            <section className="grid grid-cols-3 gap-6 md:gap-8">
                 <div className={`min-w-0 ${emailSectionFontSize}`}>
                     <h3 className="font-bold uppercase" style={{ color: primaryColor }}>Van</h3>
                     <p className="font-semibold break-words">{userProfile.name}</p>
                     <p className="break-words">{userProfile.address}</p>
-                    {userProfile.kvk_number && <p className="break-words">KvK: {userProfile.kvk_number}</p>}
-                    {userProfile.btw_number && <p className="break-words">BTW: {userProfile.btw_number}</p>}
                 </div>
                 <div className={`min-w-0 ${emailSectionFontSize}`}>
                     <h3 className="font-bold uppercase" style={{ color: primaryColor }}>Factuur aan</h3>
@@ -825,6 +893,13 @@ function WaveTemplate(props: InvoicePreviewProps) {
                         <p className="whitespace-nowrap"><span className="font-semibold">Datum:</span> {invoiceDate}</p>
                         <p className="whitespace-nowrap"><span className="font-semibold">Vervaldatum:</span> {dueDate}</p>
                     </div>
+                    <BusinessInfoStrip
+                      userProfile={userProfile}
+                      className="mt-3"
+                      align="right"
+                      variant="light"
+                      primaryColor={primaryColor}
+                    />
                 </div>
             </section>
             
