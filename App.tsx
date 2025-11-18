@@ -478,105 +478,32 @@ const App: React.FC = () => {
     }
   }, [session, fetchData]);
 
-  // Auto-detect payment return and upgrade user
+  // Clean up old sessionStorage if user is already Pro (upgrades are handled by webhook only)
   useEffect(() => {
     if (!session?.user) return;
 
-    const checkForRecentPayment = async () => {
-      const paymentTimestamp = sessionStorage.getItem('factuurlijk:paymentTimestamp');
-      const paymentSource = sessionStorage.getItem('factuurlijk:paymentSource');
-      const storedUserId = sessionStorage.getItem('factuurlijk:paymentUserId');
+    const checkPlan = async () => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('plan')
+        .eq('id', session.user.id)
+        .single();
       
-      // Check if payment was initiated recently (within last 10 minutes) and user matches
-      if (paymentTimestamp && paymentSource && storedUserId === session.user.id) {
-        const timeSincePayment = Date.now() - parseInt(paymentTimestamp);
-        const isRecent = timeSincePayment < 10 * 60 * 1000; // 10 minutes
-        
-        if (isRecent) {
-          console.log('🔍 Recent payment detected, checking if upgrade is needed...');
-          
-          // Check current plan
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('plan')
-            .eq('id', session.user.id)
-            .single();
-          
-          // If user is not Pro yet, upgrade them
-          if (profile && profile.plan !== 'pro') {
-            console.log('📝 Upgrading user to Pro after payment...');
-            
-            const storedUserEmail = sessionStorage.getItem('factuurlijk:paymentUserEmail');
-            
-            // Log payment
-            try {
-              await supabase.from('mollie_payments').insert({
-                payment_id: `payment_link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                payment_status: 'paid',
-                amount_value: 39.50,
-                amount_currency: 'EUR',
-                description: 'Factuurlijk Pro upgrade via Payment Link',
-                customer_email: storedUserEmail || session.user.email,
-                supabase_user_id: session.user.id,
-                metadata: {
-                  source: paymentSource,
-                  payment_method: 'payment_link',
-                  auto_detected: true
-                },
-                paid_at: new Date().toISOString()
-              });
-            } catch (err) {
-              console.warn('⚠️ Could not log payment:', err);
-            }
-            
-            // Upgrade to Pro
-            const { error: updateError } = await supabase
-              .from('profiles')
-              .update({ 
-                plan: 'pro', 
-                updated_at: new Date().toISOString() 
-              })
-              .eq('id', session.user.id);
-            
-            if (!updateError) {
-              console.log('✅ User auto-upgraded to Pro!');
-              // Refresh user data
-              await fetchData(session.user);
-              // Clean up sessionStorage
-              sessionStorage.removeItem('factuurlijk:paymentSource');
-              sessionStorage.removeItem('factuurlijk:paymentUserId');
-              sessionStorage.removeItem('factuurlijk:paymentUserEmail');
-              sessionStorage.removeItem('factuurlijk:paymentTimestamp');
-              
-              // Redirect to checkout-success to show success message
-              if (view !== 'checkout-success') {
-                setView('checkout-success');
-              }
-            }
-          } else if (profile?.plan === 'pro') {
-            // Already Pro, clean up
-            sessionStorage.removeItem('factuurlijk:paymentSource');
-            sessionStorage.removeItem('factuurlijk:paymentUserId');
-            sessionStorage.removeItem('factuurlijk:paymentUserEmail');
-            sessionStorage.removeItem('factuurlijk:paymentTimestamp');
-          }
-        } else {
-          // Payment too old, clean up
-          sessionStorage.removeItem('factuurlijk:paymentSource');
-          sessionStorage.removeItem('factuurlijk:paymentUserId');
-          sessionStorage.removeItem('factuurlijk:paymentUserEmail');
-          sessionStorage.removeItem('factuurlijk:paymentTimestamp');
-        }
+      if (profile?.plan === 'pro') {
+        // Already Pro, clean up old sessionStorage
+        sessionStorage.removeItem('factuurlijk:paymentSource');
+        sessionStorage.removeItem('factuurlijk:paymentUserId');
+        sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+        sessionStorage.removeItem('factuurlijk:paymentTimestamp');
       }
     };
 
-    // Check after a short delay to ensure session is ready
     const timer = setTimeout(() => {
-      checkForRecentPayment();
+      checkPlan();
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [session, view, fetchData]);
+  }, [session]);
 
 
   const handleLogout = async () => {

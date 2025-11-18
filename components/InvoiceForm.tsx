@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import type { Invoice, InvoiceLine, UserProfile, Customer, RecurringInvoiceTemplate } from '../types';
+import type { Invoice, InvoiceLine, UserProfile, Customer } from '../types';
 import { InvoicePreview } from './InvoicePreview';
-import { supabase } from '../supabaseClient';
 
 // A simple UUID generator to avoid external dependencies
 const uuidv4 = () => {
@@ -113,64 +112,6 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
   
   // Customer type state
   const [customerType, setCustomerType] = useState<'bedrijf' | 'persoon'>('bedrijf');
-  
-  // Recurring invoice state
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [recurringInterval, setRecurringInterval] = useState<'weekly' | 'monthly' | 'quarterly' | 'yearly'>('monthly');
-  const [recurringStartDate, setRecurringStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [recurringEndDate, setRecurringEndDate] = useState<string | null>(null);
-  const [recurringTemplates, setRecurringTemplates] = useState<RecurringInvoiceTemplate[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
-
-  // Load recurring templates when component mounts or when isRecurring changes
-  useEffect(() => {
-    const loadRecurringTemplates = async () => {
-      if (!isRecurring || !userProfile.id) return;
-      
-      setLoadingTemplates(true);
-      try {
-        const { data, error } = await supabase
-          .from('recurring_invoice_templates')
-          .select('*')
-          .eq('user_id', userProfile.id)
-          .order('created_at', { ascending: false });
-        
-        if (error) throw error;
-        setRecurringTemplates(data || []);
-      } catch (error) {
-        console.error('Error loading recurring templates:', error);
-      } finally {
-        setLoadingTemplates(false);
-      }
-    };
-    
-    loadRecurringTemplates();
-  }, [isRecurring, userProfile.id]);
-
-  // Load template data when selected
-  useEffect(() => {
-    if (selectedTemplateId && recurringTemplates.length > 0) {
-      const template = recurringTemplates.find(t => t.id === selectedTemplateId);
-      if (template) {
-        setInvoice(prev => ({
-          ...prev,
-          customer: template.customer,
-          lines: template.lines,
-          btw_percentage: template.btw_percentage,
-        }));
-        setRecurringInterval(template.recurring_interval);
-        setRecurringStartDate(template.recurring_start_date);
-        setRecurringEndDate(template.recurring_end_date);
-        // Update invoice date to today
-        setInvoice(prev => ({
-          ...prev,
-          invoice_date: new Date().toISOString().split('T')[0],
-          due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        }));
-      }
-    }
-  }, [selectedTemplateId, recurringTemplates]);
 
   // This useEffect is now ONLY for handling a switch from one invoice to another
   // (e.g., from 'new' to 'edit') while the component is already mounted.
@@ -178,12 +119,6 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
   useEffect(() => {
     if (initialInvoice) {
       setInvoice(initialInvoice);
-      setIsRecurring(initialInvoice.is_recurring || false);
-      if (initialInvoice.is_recurring) {
-        setRecurringInterval(initialInvoice.recurring_interval || 'monthly');
-        setRecurringStartDate(initialInvoice.recurring_start_date || new Date().toISOString().split('T')[0]);
-        setRecurringEndDate(initialInvoice.recurring_end_date || null);
-      }
     }
   }, [initialInvoice]);
   
@@ -227,16 +162,6 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setInvoice(prev => ({ ...prev, [name]: name === 'btw_percentage' ? parseFloat(value) : value }));
-    
-    // Update recurring dates when invoice dates change
-    if (isRecurring) {
-      if (name === 'invoice_date') {
-        setRecurringStartDate(value);
-      } else if (name === 'due_date') {
-        // For recurring invoices, we can use due_date as end date if needed
-        // But typically we'd use invoice_date as start date
-      }
-    }
   };
   
   const handleLineChange = (lineId: string, field: keyof Omit<InvoiceLine, 'id'>, value: string) => {
@@ -338,58 +263,13 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    let templateId = selectedTemplateId;
-    
-    // If recurring, save as template first (or update existing)
-    if (isRecurring && userProfile.id) {
-      try {
-        const templateName = invoice.customer.name 
-          ? `${invoice.customer.name} - ${recurringInterval === 'weekly' ? 'Wekelijks' : recurringInterval === 'monthly' ? 'Maandelijks' : recurringInterval === 'quarterly' ? 'Kwartaal' : 'Jaarlijks'}`
-          : `Terugkerende factuur - ${recurringInterval}`;
-        
-        const templateData: any = {
-          user_id: userProfile.id,
-          name: templateName,
-          customer: invoice.customer,
-          lines: invoice.lines,
-          btw_percentage: invoice.btw_percentage,
-          recurring_interval: recurringInterval,
-          recurring_start_date: recurringStartDate,
-          recurring_end_date: recurringEndDate,
-        };
-        
-        // If we have a selected template, update it, otherwise create new
-        if (selectedTemplateId) {
-          templateData.id = selectedTemplateId;
-        }
-        
-        const { data: template, error: templateError } = await supabase
-          .from('recurring_invoice_templates')
-          .upsert(templateData, { onConflict: 'id' })
-          .select()
-          .single();
-        
-        if (templateError) {
-          console.error('Error saving template:', templateError);
-        } else if (template) {
-          templateId = template.id;
-        }
-      } catch (error) {
-        console.error('Error saving recurring template:', error);
-      }
-    }
-    
-    // Save invoice with recurring data
+    // All invoices are one-time (eenmalig)
     const invoiceToSave: Invoice = {
       ...invoice,
-      is_recurring: isRecurring,
-      recurring_template_id: isRecurring ? templateId : undefined,
-      recurring_interval: isRecurring ? recurringInterval : undefined,
-      recurring_start_date: isRecurring ? recurringStartDate : undefined,
-      recurring_end_date: isRecurring ? recurringEndDate : undefined,
+      is_recurring: false,
     };
     
     onSave(invoiceToSave);
@@ -438,34 +318,6 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
         </div>
       </header>
 
-      {/* Recurring Invoice Options */}
-      <div className="flex-shrink-0 mb-3">
-        {isRecurring && (
-          <div className="space-y-3">
-            {/* Select Existing Template */}
-            {recurringTemplates.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-2">
-                  Selecteer bestaande terugkerende factuur
-                </label>
-                <select
-                  value={selectedTemplateId}
-                  onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className={inputStyle}
-                >
-                  <option value="">-- Nieuwe terugkerende factuur --</option>
-                  {recurringTemplates.map(template => (
-                    <option key={template.id} value={template.id}>
-                      {template.name} ({template.recurring_interval})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-      
       {/* Main Content */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 overflow-hidden">
         {/* Left Column: Preview - Hidden on mobile, shown on larger screens */}
@@ -495,52 +347,6 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
         {/* Right Column: Form Inputs */}
         <div className="lg:col-span-1 overflow-y-auto space-y-3 sm:space-y-4">
             <h2 className="text-xl font-bold text-zinc-800 mb-3">Factuurgegevens</h2>
-            
-            {/* Recurring Invoice Toggle - In Factuurgegevens section */}
-            <div className="mb-3">
-                <div className="inline-flex rounded-lg border border-stone-300 bg-white p-1 shadow-sm">
-                  <button
-                    type="button"
-                    onClick={() => setIsRecurring(false)}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center ${
-                      !isRecurring
-                        ? 'bg-stone-800 text-white'
-                        : 'bg-white text-zinc-700 hover:text-zinc-900'
-                    }`}
-                  >
-                    <span className={`inline-block w-4 h-4 rounded-full border-2 mr-2 flex items-center justify-center ${
-                      !isRecurring
-                        ? 'border-white'
-                        : 'border-stone-300'
-                    }`}>
-                      {!isRecurring && (
-                        <span className="w-2 h-2 rounded-full bg-white"></span>
-                      )}
-                    </span>
-                    Eenmalig
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsRecurring(true)}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center ${
-                      isRecurring
-                        ? 'bg-stone-800 text-white'
-                        : 'bg-white text-zinc-700 hover:text-zinc-900'
-                    }`}
-                  >
-                    <span className={`inline-block w-4 h-4 rounded-full border-2 mr-2 flex items-center justify-center ${
-                      isRecurring
-                        ? 'border-white'
-                        : 'border-stone-300'
-                    }`}>
-                      {isRecurring && (
-                        <span className="w-2 h-2 rounded-full bg-white"></span>
-                      )}
-                    </span>
-                    Terugkerend
-                  </button>
-                </div>
-            </div>
             
             <div className="bg-stone-50 p-4 sm:p-5 rounded-lg space-y-4">
                 <h3 className="font-semibold text-zinc-700 text-lg">Klant</h3>
@@ -696,29 +502,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
                         <label htmlFor="due_date" className="block text-sm font-medium text-zinc-700 mb-2">Vervaldatum</label>
                         <input type="date" id="due_date" name="due_date" value={invoice.due_date} onChange={handleChange} className={`${inputStyle} mt-0`} required />
                     </div>
-                     {isRecurring && (
-                        <div className="sm:col-span-2">
-                            <label className="block text-sm font-medium text-zinc-700 mb-2">
-                                Interval
-                            </label>
-                            <div className="flex rounded-lg border border-stone-300 bg-white overflow-hidden">
-                                <div className="px-3 py-2 text-sm text-zinc-600 border-r border-stone-300 bg-stone-50">
-                                    Interval
-                                </div>
-                                <select
-                                    value={recurringInterval}
-                                    onChange={(e) => setRecurringInterval(e.target.value as 'weekly' | 'monthly' | 'quarterly' | 'yearly')}
-                                    className="flex-1 px-3 py-2 text-sm border-0 focus:ring-0 focus:outline-none"
-                                >
-                                    <option value="weekly">Wekelijks</option>
-                                    <option value="monthly">Maandelijks</option>
-                                    <option value="quarterly">Kwartaal</option>
-                                    <option value="yearly">Jaarlijks</option>
-                                </select>
-                            </div>
-                        </div>
-                    )}
-                    <div className="sm:col-span-2">
+                     <div className="sm:col-span-2">
                         <label htmlFor="btw_percentage" className="block text-sm font-medium text-zinc-700 mb-2">BTW Percentage</label>
                         <input type="number" id="btw_percentage" name="btw_percentage" value={invoice.btw_percentage} onChange={handleChange} className={`${inputStyle} mt-0`} required />
                     </div>

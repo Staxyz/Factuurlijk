@@ -378,18 +378,43 @@ app.post('/api/mollie-webhook', async (req, res) => {
       status: payment.status,
       amount: payment.amount,
       method: payment.method,
-      metadata: payment.metadata
+      metadata: payment.metadata,
+      customerId: payment.customerId,
+      details: payment.details
     });
+    
+    // Try to get customer email from payment
+    let customerEmail = null;
+    if (payment.customerId) {
+      try {
+        const customer = await mollieClient.customers.get(payment.customerId);
+        customerEmail = customer.email;
+        console.log('📧 Customer email from Mollie customer:', customerEmail);
+      } catch (customerError) {
+        console.warn('⚠️ Could not fetch customer from Mollie:', customerError);
+      }
+    }
     
     // Process payment based on status
     if (payment.status === 'paid') {
       console.log('✅ Payment is paid, syncing to Supabase...');
+      
+      // Add customer email to payment metadata if not present
+      if (customerEmail && !payment.metadata?.customer_email) {
+        payment.metadata = {
+          ...(payment.metadata || {}),
+          customer_email: customerEmail
+        };
+      }
+      
       const syncResult = await syncPaymentToSupabase(payment);
       
       if (syncResult.supabaseUserId) {
         console.log('✅ Payment synced successfully! User upgraded:', syncResult.supabaseUserId);
       } else {
         console.warn('⚠️ Payment synced but no user ID found:', syncResult.error);
+        console.warn('   Payment metadata:', JSON.stringify(payment.metadata, null, 2));
+        console.warn('   Customer email:', customerEmail);
       }
     } else {
       console.log(`ℹ️  Payment status is "${payment.status}", not processing (only "paid" status is processed)`);
@@ -447,6 +472,134 @@ app.post('/api/admin/reset-plan', async (req, res) => {
     console.error('❌ Error:', error);
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Internal server error'
+    });
+  }
+});
+
+/**
+ * Verify Payment Link Status
+ * POST /api/verify-payment-link
+ * 
+ * This endpoint verifies payment link status and finds the payment
+ */
+app.post('/api/verify-payment-link', async (req, res) => {
+  try {
+    const { paymentLinkId, userEmail, userId } = req.body;
+
+    console.log('🔍 Verifying Mollie payment link:', { paymentLinkId, userEmail, userId });
+
+    if (!paymentLinkId) {
+      console.error('❌ Missing paymentLinkId');
+      return res.status(400).json({
+        error: 'Missing required field: paymentLinkId',
+        status: 'invalid'
+      });
+    }
+
+    // Get payment link from Mollie
+    console.log('🔄 Fetching payment link from Mollie...');
+    let paymentLink;
+    try {
+      paymentLink = await mollieClient.paymentLinks.get(paymentLinkId);
+    } catch (linkError) {
+      console.error('❌ Error fetching payment link:', linkError);
+      return res.status(400).json({
+        error: 'Invalid payment link ID',
+        status: 'invalid'
+      });
+    }
+
+    console.log('📊 Payment link retrieved:', {
+      id: paymentLink.id,
+      description: paymentLink.description,
+      amount: paymentLink.amount
+    });
+
+    // Get payments for this payment link
+    console.log('🔄 Fetching payments for payment link...');
+    let payments = [];
+    try {
+      // List all recent payments (last 100)
+      const allPayments = await mollieClient.payments.list({
+        limit: 100
+      });
+      
+      console.log(`📊 Found ${allPayments.length} total payments`);
+      
+      // Filter payments that match this payment link
+      // Match by amount and recent timestamp (within last hour to be safe)
+      payments = allPayments.filter(p => {
+        const paymentDate = p.createdAt ? new Date(p.createdAt) : null;
+        const isRecent = paymentDate && (Date.now() - paymentDate.getTime()) < 60 * 60 * 1000; // Last 60 minutes
+        const amountMatches = p.amount?.value === paymentLink.amount?.value && 
+                              p.amount?.currency === paymentLink.amount?.currency;
+        
+        if (isRecent && amountMatches) {
+          console.log(`✅ Found matching payment: ${p.id}, status: ${p.status}, created: ${p.createdAt}`);
+        }
+        
+        return isRecent && amountMatches;
+      });
+      
+      console.log(`📊 Found ${payments.length} matching payments for payment link`);
+    } catch (paymentsError) {
+      console.error('❌ Error fetching payments:', paymentsError);
+      return res.status(500).json({
+        error: 'Could not fetch payments',
+        status: 'error'
+      });
+    }
+
+    // Find paid payment
+    const paidPayment = payments.find(p => p.status === 'paid');
+    
+    if (paidPayment) {
+      console.log('✅ Found paid payment:', paidPayment.id);
+      
+      // Sync to Supabase with user info
+      if (userId || userEmail) {
+        // Add user info to payment metadata for sync
+        paidPayment.metadata = {
+          ...(paidPayment.metadata || {}),
+          supabase_user_id: userId || null,
+          customer_email: userEmail || null
+        };
+      }
+      
+      const syncResult = await syncPaymentToSupabase(paidPayment);
+      
+      return res.json({
+        status: 'complete',
+        payment_status: 'paid',
+        payment_id: paidPayment.id,
+        amount: paidPayment.amount,
+        message: 'Payment verified successfully',
+        user_upgraded: !!syncResult.supabaseUserId
+      });
+    }
+
+    // Check for pending payments
+    const pendingPayment = payments.find(p => ['open', 'pending', 'authorized'].includes(p.status));
+    
+    if (pendingPayment) {
+      return res.json({
+        status: 'processing',
+        payment_status: pendingPayment.status,
+        payment_id: pendingPayment.id,
+        message: 'Payment is still processing'
+      });
+    }
+
+    return res.json({
+      status: 'not_found',
+      message: 'No payment found for this payment link'
+    });
+
+  } catch (error) {
+    console.error('❌ Error verifying payment link:', error);
+    return res.status(500).json({
+      error: error.message || 'Internal server error',
+      status: 'error'
     });
   }
 });

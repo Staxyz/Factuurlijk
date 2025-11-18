@@ -56,6 +56,7 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
     }
     
     // Upgrade user to Pro
+    console.log('💾 Attempting to upgrade profile to Pro for user:', user.id);
     const { error: updateError, data: updateData } = await supabase
       .from('profiles')
       .update({ 
@@ -67,7 +68,21 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
     
     if (updateError) {
       console.error('❌ Error upgrading profile:', updateError);
+      console.error('   Error code:', updateError.code);
+      console.error('   Error message:', updateError.message);
+      console.error('   Error details:', JSON.stringify(updateError, null, 2));
+      
+      // If RLS error, try to get more info
+      if (updateError.code === '42501' || updateError.message?.includes('permission')) {
+        throw new Error('Geen toestemming om account te upgraden. Neem contact op met support.');
+      }
+      
       throw updateError;
+    }
+    
+    if (!updateData || updateData.length === 0) {
+      console.warn('⚠️ Update returned no data - profile might not exist');
+      throw new Error('Profiel niet gevonden. Neem contact op met support.');
     }
     
     console.log('✅ Profile upgraded to Pro:', updateData);
@@ -107,6 +122,7 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
         const hash = window.location.hash || '';
         const hashQuery = hash.includes('?') ? hash.split('?')[1] : '';
         const hashParams = new URLSearchParams(hashQuery);
+        const currentUrl = window.location.href;
 
         // Check for payment_id from Mollie redirect
         const paymentIdFromUrl =
@@ -115,24 +131,165 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
           urlParams.get('paymentId') ||
           hashParams.get('paymentId');
 
+        // Check for payment link ID in URL (from Mollie status page)
+        // Format: https://payment-links.mollie.com/nl/status/019a96c8-686f-7384-a620-4137d127c92b
+        let paymentLinkId = null;
+        const paymentLinkMatch = currentUrl.match(/\/status\/([a-f0-9-]+)/i);
+        if (paymentLinkMatch) {
+          paymentLinkId = paymentLinkMatch[1];
+          console.log('🔍 Found payment link ID in URL:', paymentLinkId);
+        }
+
         const storedPaymentId = getStoredPaymentId();
+        const paymentSource = sessionStorage.getItem('factuurlijk:paymentSource');
+        const storedUserId = sessionStorage.getItem('factuurlijk:paymentUserId');
+        const storedUserEmail = sessionStorage.getItem('factuurlijk:paymentUserEmail');
+        const paymentTimestamp = sessionStorage.getItem('factuurlijk:paymentTimestamp');
+        
+        // Check if payment was initiated recently (within last 30 minutes)
+        const isRecentPayment = paymentTimestamp && (Date.now() - parseInt(paymentTimestamp)) < 30 * 60 * 1000;
+        
+        // If we have a payment link ID, verify it via the new endpoint
+        if (paymentLinkId && isRecentPayment && (storedUserId === currentUser.id || !storedUserId)) {
+          console.log('🔍 Verifying payment link...');
+          
+          try {
+            const verifyResponse = await fetch(buildApiUrl('/api/verify-payment-link'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                paymentLinkId,
+                userEmail: storedUserEmail || currentUser.email,
+                userId: currentUser.id
+              })
+            });
+
+            if (!verifyResponse.ok) {
+              throw new Error('Kon betaling niet verifiëren');
+            }
+
+            const verifyResult = await verifyResponse.json();
+            console.log('📊 Payment link verification result:', verifyResult);
+
+            if (verifyResult.status === 'complete' && verifyResult.user_upgraded) {
+              console.log('✅ Payment verified and user upgraded!');
+              setCountdown(5);
+              setIsSuccess(true);
+              setIsProcessing(false);
+              if (onUpgradeSuccess) {
+                await onUpgradeSuccess().catch(err => console.error('Error refreshing profile:', err));
+              }
+              // Clean up sessionStorage
+              sessionStorage.removeItem('factuurlijk:paymentSource');
+              sessionStorage.removeItem('factuurlijk:paymentUserId');
+              sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+              sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+              return;
+            } else if (verifyResult.status === 'processing') {
+              // Payment is still processing, wait and retry
+              console.log('⏳ Payment is still processing, waiting...');
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              // Retry once
+              const retryResponse = await fetch(buildApiUrl('/api/verify-payment-link'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  paymentLinkId,
+                  userEmail: storedUserEmail || currentUser.email,
+                  userId: currentUser.id
+                })
+              });
+              const retryResult = await retryResponse.json();
+              if (retryResult.status === 'complete' && retryResult.user_upgraded) {
+                console.log('✅ Payment verified on retry!');
+                setCountdown(5);
+                setIsSuccess(true);
+                setIsProcessing(false);
+                if (onUpgradeSuccess) {
+                  await onUpgradeSuccess().catch(err => console.error('Error refreshing profile:', err));
+                }
+                sessionStorage.removeItem('factuurlijk:paymentSource');
+                sessionStorage.removeItem('factuurlijk:paymentUserId');
+                sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+                sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+                return;
+              }
+            }
+          } catch (verifyError) {
+            console.error('❌ Error verifying payment link:', verifyError);
+            // Fall through to try other methods
+          }
+        }
 
         const paymentId = paymentIdFromUrl || storedPaymentId;
         
         // Check if this is a Payment Link return (might not have payment_id)
-        const paymentSource = sessionStorage.getItem('factuurlijk:paymentSource');
         const isPaymentLinkReturn = paymentSource === 'templates-page' || paymentSource === 'upgrade-page';
-        const storedUserId = sessionStorage.getItem('factuurlijk:paymentUserId');
-        const paymentTimestamp = sessionStorage.getItem('factuurlijk:paymentTimestamp');
         
-        // Check if payment was initiated recently (within last 10 minutes)
-        const isRecentPayment = paymentTimestamp && (Date.now() - parseInt(paymentTimestamp)) < 10 * 60 * 1000;
-        
-        // If no payment ID but we have stored user info and recent payment, upgrade directly
+        // If no payment ID but we have stored user info and recent payment, try to upgrade directly
         if (!paymentId && (isPaymentLinkReturn || isRecentPayment) && (storedUserId === currentUser.id || !storedUserId)) {
-          console.log('📝 Payment Link return detected or recent payment, upgrading user directly...');
-          await upgradeUserDirectly(currentUser, paymentSource || 'unknown');
-          return;
+          console.log('📝 Payment Link return detected, checking payment status...');
+          
+          // First check if user is already Pro (webhook might have upgraded)
+          let { data: profile } = await supabase
+            .from('profiles')
+            .select('plan')
+            .eq('id', currentUser.id)
+            .single();
+          
+          if (profile?.plan === 'pro') {
+            console.log('✅ User already upgraded via webhook!');
+            setCountdown(5);
+            setIsSuccess(true);
+            setIsProcessing(false);
+            if (onUpgradeSuccess) {
+              await onUpgradeSuccess().catch(err => console.error('Error refreshing profile:', err));
+            }
+            sessionStorage.removeItem('factuurlijk:paymentSource');
+            sessionStorage.removeItem('factuurlijk:paymentUserId');
+            sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+            sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+            return;
+          }
+          
+          // Try to verify payment via payment link ID from sessionStorage or try direct upgrade
+          // Since we know payment was completed (user got email confirmation), upgrade directly
+          console.log('💳 Payment confirmed via email, upgrading user directly...');
+          
+          try {
+            await upgradeUserDirectly(currentUser, paymentSource || 'upgrade-page');
+            return;
+          } catch (upgradeError) {
+            console.error('❌ Direct upgrade failed, waiting for webhook...', upgradeError);
+            
+            // Wait a bit for webhook and check again
+            console.log('⏳ Waiting for webhook to process payment...');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+            const { data: profileRetry } = await supabase
+              .from('profiles')
+              .select('plan')
+              .eq('id', currentUser.id)
+              .single();
+            
+            if (profileRetry?.plan === 'pro') {
+              console.log('✅ User upgraded after webhook delay!');
+              setCountdown(5);
+              setIsSuccess(true);
+              setIsProcessing(false);
+              if (onUpgradeSuccess) {
+                await onUpgradeSuccess().catch(err => console.error('Error refreshing profile:', err));
+              }
+              sessionStorage.removeItem('factuurlijk:paymentSource');
+              sessionStorage.removeItem('factuurlijk:paymentUserId');
+              sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+              sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+              return;
+            }
+            
+            // If still not upgraded, show helpful error
+            throw new Error('Betaling is voltooid, maar account upgrade is nog bezig. Ververs de pagina over 30 seconden of neem contact op met support als het probleem aanhoudt.');
+          }
         }
         
         if (!paymentId && !isPaymentLinkReturn && !isRecentPayment) {
@@ -302,23 +459,90 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
   }, [isSuccess, countdown, setCurrentView]);
 
   if (error) {
+    // Check if user might already be Pro despite the error
+    const checkIfPro = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const user = sessionData.session?.user;
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('plan')
+            .eq('id', user.id)
+            .single();
+          
+          if (profile?.plan === 'pro') {
+            // User is actually Pro, show success instead
+            setError(null);
+            setIsSuccess(true);
+            setCountdown(5);
+            setIsProcessing(false);
+            if (onUpgradeSuccess) {
+              await onUpgradeSuccess().catch(err => console.error('Error refreshing profile:', err));
+            }
+            return true;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking profile:', err);
+      }
+      return false;
+    };
+    
+    // Auto-check if Pro after error
+    checkIfPro();
+    
     return (
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-white to-slate-100">
-        <div className="text-center bg-red-50 p-8 rounded-lg border border-red-200 max-w-md">
-          <h1 className="text-2xl font-bold text-red-700 mb-4">⚠️ Fout!</h1>
-          <p className="text-red-600 mb-4">{error}</p>
+        <div className="text-center bg-yellow-50 p-8 rounded-lg border border-yellow-200 max-w-md">
+          <h1 className="text-2xl font-bold text-yellow-700 mb-4">⏳ Upgrade wordt verwerkt</h1>
+          <p className="text-yellow-600 mb-4">{error}</p>
+          <p className="text-sm text-yellow-500 mb-4">
+            Als je een bevestigingsemail hebt ontvangen, is je betaling voltooid. 
+            Je account wordt automatisch geüpgraded. Dit kan enkele minuten duren.
+          </p>
           {verificationStatus && (
-            <p className="text-sm text-red-500 mb-2">Verificatie status: {verificationStatus}</p>
+            <p className="text-sm text-yellow-600 mb-2">Verificatie status: {verificationStatus}</p>
           )}
           {paymentStatus && (
-            <p className="text-sm text-red-500 mb-4">Betaalstatus: {paymentStatus}</p>
+            <p className="text-sm text-yellow-600 mb-4">Betaalstatus: {paymentStatus}</p>
           )}
-          <button
-            onClick={() => setCurrentView('upgrade')}
-            className="bg-teal-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-teal-700 transition-colors"
-          >
-            Terug naar upgrade
-          </button>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={async () => {
+                // Try to refresh and check again
+                if (onUpgradeSuccess) {
+                  await onUpgradeSuccess();
+                }
+                // Check if Pro now
+                const { data: sessionData } = await supabase.auth.getSession();
+                const user = sessionData.session?.user;
+                if (user) {
+                  const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('plan')
+                    .eq('id', user.id)
+                    .single();
+                  
+                  if (profile?.plan === 'pro') {
+                    setError(null);
+                    setIsSuccess(true);
+                    setCountdown(5);
+                    setIsProcessing(false);
+                  }
+                }
+              }}
+              className="bg-teal-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-teal-700 transition-colors"
+            >
+              Ververs status
+            </button>
+            <button
+              onClick={() => setCurrentView('dashboard')}
+              className="bg-stone-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-stone-700 transition-colors"
+            >
+              Naar dashboard
+            </button>
+          </div>
         </div>
       </div>
     );

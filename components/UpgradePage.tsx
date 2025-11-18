@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import type { View, UserProfile } from '../types';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
-import QRCodeSVG from 'react-qr-code';
 
 interface UpgradePageProps {
     setCurrentView: (view: View) => void;
@@ -38,8 +37,16 @@ export const UpgradePage: React.FC<UpgradePageProps> = ({ setCurrentView, sessio
 
         try {
             // Use Mollie Payment Link directly (no API call needed)
-            const paymentLink = import.meta.env.VITE_MOLLIE_PAYMENT_LINK || 'https://payment-links.mollie.com/payment/G9QCA98NPsAFM65BU8fsQ';
+            // NEW PAYMENT LINK: erYCHDF3fXvq4zBJPVpTW
+            const paymentLink = 'https://payment-links.mollie.com/payment/erYCHDF3fXvq4zBJPVpTW';
             
+            // Verify the link is correct
+            if (!paymentLink.includes('erYCHDF3fXvq4zBJPVpTW')) {
+                console.error('❌ WRONG PAYMENT LINK DETECTED!', paymentLink);
+                throw new Error('Incorrect payment link configuration');
+            }
+            
+            console.log('✅ CORRECT PAYMENT LINK:', paymentLink);
             console.log('🔄 Redirecting to Mollie Payment Link:', paymentLink);
             
             // Store user info in sessionStorage for after payment return
@@ -51,6 +58,7 @@ export const UpgradePage: React.FC<UpgradePageProps> = ({ setCurrentView, sessio
             }
             
             // Redirect to Mollie Payment Link
+            console.log('🚀 EXECUTING REDIRECT TO:', paymentLink);
             window.location.href = paymentLink;
             
         } catch (err) {
@@ -127,66 +135,16 @@ export const UpgradePage: React.FC<UpgradePageProps> = ({ setCurrentView, sessio
                                     </div>
                                 )}
                                 
-                                {/* QR Code voor betaling */}
-                                <div className="bg-white p-4 rounded-lg border-2 border-teal-200 shadow-sm mb-4">
-                                    <p className="text-xs font-semibold text-zinc-700 mb-2 text-center">Scan om te betalen</p>
-                                    <div className="flex justify-center mb-2">
-                                        <div className="bg-white p-2 rounded border border-stone-200 inline-block">
-                                            <QRCodeSVG
-                                                value={import.meta.env.VITE_MOLLIE_PAYMENT_LINK || 'https://payment-links.mollie.com/payment/G9QCA98NPsAFM65BU8fsQ'}
-                                                size={120}
-                                                level="M"
-                                                style={{ height: "auto", maxWidth: "100%", width: "100%" }}
-                                                viewBox={`0 0 120 120`}
-                                            />
-                                        </div>
-                                    </div>
-                                    <p className="text-xs text-zinc-500 text-center">Scan met je telefoon om direct te betalen</p>
-                                </div>
-                                
                                 <button 
                                     onClick={handleCheckout}
                                     disabled={isLoading}
-                                    className="bg-teal-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-teal-700 transition-colors w-full shadow-sm disabled:bg-teal-400 disabled:cursor-not-allowed mb-3"
+                                    className="bg-teal-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-teal-700 transition-colors w-full shadow-sm disabled:bg-teal-400 disabled:cursor-not-allowed"
                                 >
                                     {isLoading ? 'Aan het laden...' : 'Upgrade naar Pro'}
                                 </button>
-                                {/* Handmatige upgrade knop voor als betaling al is gedaan */}
-                                {sessionStorage.getItem('factuurlijk:paymentTimestamp') && (
-                                    <button 
-                                        onClick={async () => {
-                                            const paymentTimestamp = sessionStorage.getItem('factuurlijk:paymentTimestamp');
-                                            if (paymentTimestamp && (Date.now() - parseInt(paymentTimestamp)) < 10 * 60 * 1000) {
-                                                // Recent payment detected, upgrade manually
-                                                try {
-                                                    const { error: updateError } = await supabase
-                                                        .from('profiles')
-                                                        .update({ 
-                                                            plan: 'pro', 
-                                                            updated_at: new Date().toISOString() 
-                                                        })
-                                                        .eq('id', session?.user?.id || userProfile.id);
-                                                    
-                                                    if (updateError) {
-                                                        alert('Fout bij upgraden: ' + updateError.message);
-                                                    } else {
-                                                        alert('✅ Account succesvol geupgrade naar Pro!');
-                                                        onUpgrade();
-                                                        sessionStorage.removeItem('factuurlijk:paymentTimestamp');
-                                                        sessionStorage.removeItem('factuurlijk:paymentSource');
-                                                    }
-                                                } catch (err) {
-                                                    alert('Fout: ' + (err instanceof Error ? err.message : 'Onbekende fout'));
-                                                }
-                                            } else {
-                                                alert('Geen recente betaling gevonden. Start een nieuwe betaling.');
-                                            }
-                                        }}
-                                        className="bg-emerald-500 text-white font-medium py-2 px-4 rounded-lg hover:bg-emerald-600 transition-colors w-full text-sm"
-                                    >
-                                        Ik heb al betaald - Upgrade nu
-                                    </button>
-                                )}
+                                <p className="text-xs text-zinc-500 text-center mt-3">
+                                    Na betaling wordt je account automatisch geüpgraded via de Mollie webhook.
+                                </p>
                             </>
                         )}
                     </div>

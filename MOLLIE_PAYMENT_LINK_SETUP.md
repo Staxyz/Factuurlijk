@@ -11,7 +11,7 @@ Om ervoor te zorgen dat gebruikers automatisch worden doorgestuurd na betaling, 
 
 2. **Ga naar Payment Links**
    - Klik op "Payment Links" in het menu
-   - Zoek je Payment Link: `G9QCA98NPsAFM65BU8fsQ`
+   - Zoek je Payment Link: `erYCHDF3fXvq4zBJPVpTW`
 
 3. **Bewerk de Payment Link**
    - Klik op de Payment Link om deze te bewerken

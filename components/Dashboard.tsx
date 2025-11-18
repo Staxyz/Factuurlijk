@@ -66,142 +66,39 @@ export const Dashboard: React.FC<DashboardProps> = ({ invoices, setCurrentView, 
     fetchCurrentPlan();
   }, [session]);
 
-  // Check for recent payment and upgrade user
+  // Check if user is already Pro (but don't auto-upgrade - that's handled by webhook)
   useEffect(() => {
     if (!session?.user || hasCheckedPayment) return;
 
-    const checkAndUpgrade = async () => {
+    const checkPlan = async () => {
       try {
-        const paymentTimestamp = sessionStorage.getItem('factuurlijk:paymentTimestamp');
-        const paymentSource = sessionStorage.getItem('factuurlijk:paymentSource');
-        const storedUserId = sessionStorage.getItem('factuurlijk:paymentUserId');
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('plan')
+          .eq('id', session.user.id)
+          .single();
         
-        console.log('🔍 Checking for payment:', { paymentTimestamp, paymentSource, storedUserId, currentUserId: session.user.id });
+        if (profileError) {
+          console.error('❌ Error fetching profile:', profileError);
+          return;
+        }
         
-        // Check if payment was initiated recently (within last 30 minutes to be safe)
-        if (paymentTimestamp && paymentSource && storedUserId === session.user.id) {
-          const timeSincePayment = Date.now() - parseInt(paymentTimestamp);
-          const isRecent = timeSincePayment < 30 * 60 * 1000; // 30 minutes
-          
-          if (isRecent) {
-            console.log('✅ Recent payment detected on dashboard, upgrading user...');
-            
-            // Check current plan first
-            const { data: profile, error: profileError } = await supabase
-              .from('profiles')
-              .select('plan')
-              .eq('id', session.user.id)
-              .single();
-            
-            if (profileError) {
-              console.error('❌ Error fetching profile:', profileError);
-              return;
-            }
-            
-            // If user is not Pro yet, upgrade them
-            if (profile && profile.plan !== 'pro') {
-              console.log('📝 Upgrading user to Pro after payment...');
-              
-              const storedUserEmail = sessionStorage.getItem('factuurlijk:paymentUserEmail');
-              
-              // Log payment to database first
-              try {
-                const { error: logError } = await supabase.from('mollie_payments').insert({
-                  payment_id: `payment_link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                  payment_status: 'paid',
-                  amount_value: 39.50,
-                  amount_currency: 'EUR',
-                  description: 'Factuurlijk Pro upgrade via Payment Link',
-                  customer_email: storedUserEmail || session.user.email,
-                  supabase_user_id: session.user.id,
-                  metadata: {
-                    source: paymentSource,
-                    payment_method: 'payment_link',
-                    auto_detected_on_dashboard: true,
-                    upgraded_at: new Date().toISOString()
-                  },
-                  paid_at: new Date().toISOString()
-                });
-                
-                if (logError) {
-                  console.warn('⚠️ Could not log payment:', logError);
-                } else {
-                  console.log('✅ Payment logged to database');
-                }
-              } catch (logErr) {
-                console.warn('⚠️ Error logging payment:', logErr);
-              }
-              
-              // Upgrade to Pro
-              const { error: updateError, data: updateData } = await supabase
-                .from('profiles')
-                .update({ 
-                  plan: 'pro', 
-                  updated_at: new Date().toISOString() 
-                })
-                .eq('id', session.user.id)
-                .select();
-              
-              if (!updateError) {
-                console.log('✅ User upgraded to Pro!', updateData);
-                // Update plan state so the upgrade box disappears
-                setCurrentPlan('pro');
-                // Show success message
-                setShowPaymentSuccess(true);
-                // Refresh user data to update UI
-                if (onRefresh) {
-                  await onRefresh();
-                }
-                // Clean up sessionStorage after successful upgrade
-                sessionStorage.removeItem('factuurlijk:paymentSource');
-                sessionStorage.removeItem('factuurlijk:paymentUserId');
-                sessionStorage.removeItem('factuurlijk:paymentUserEmail');
-                sessionStorage.removeItem('factuurlijk:paymentTimestamp');
-                
-                // Auto-hide after 15 seconds (longer so user can read it)
-                setTimeout(() => {
-                  setShowPaymentSuccess(false);
-                }, 15000);
-              } else {
-                console.error('❌ Error upgrading profile:', updateError);
-                // Don't clean up sessionStorage if upgrade failed - user can try again
-              }
-            } else if (profile?.plan === 'pro') {
-              // Already Pro, update plan state and clean up
-              console.log('✅ User is already Pro, cleaning up sessionStorage');
-              setCurrentPlan('pro');
-              sessionStorage.removeItem('factuurlijk:paymentSource');
-              sessionStorage.removeItem('factuurlijk:paymentUserId');
-              sessionStorage.removeItem('factuurlijk:paymentUserEmail');
-              sessionStorage.removeItem('factuurlijk:paymentTimestamp');
-            }
-          } else {
-            // Payment too old, clean up
-            console.log('⚠️ Payment too old, cleaning up');
-            sessionStorage.removeItem('factuurlijk:paymentSource');
-            sessionStorage.removeItem('factuurlijk:paymentUserId');
-            sessionStorage.removeItem('factuurlijk:paymentUserEmail');
-            sessionStorage.removeItem('factuurlijk:paymentTimestamp');
-          }
-        } else {
-          console.log('ℹ️ No recent payment found in sessionStorage');
+        if (profile?.plan === 'pro') {
+          setCurrentPlan('pro');
+          // Clean up old sessionStorage if user is already Pro
+          sessionStorage.removeItem('factuurlijk:paymentSource');
+          sessionStorage.removeItem('factuurlijk:paymentUserId');
+          sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+          sessionStorage.removeItem('factuurlijk:paymentTimestamp');
         }
       } catch (error) {
-        console.error('❌ Error checking payment:', error);
+        console.error('❌ Error checking plan:', error);
       } finally {
         setHasCheckedPayment(true);
       }
     };
 
-    // Check immediately and also after a short delay to catch any race conditions
-    checkAndUpgrade();
-    const timer = setTimeout(() => {
-      if (!hasCheckedPayment) {
-        checkAndUpgrade();
-      }
-    }, 2000);
-
-    return () => clearTimeout(timer);
+    checkPlan();
   }, [session, hasCheckedPayment]);
 
   const calculateTotal = (invoice: Invoice) => {
