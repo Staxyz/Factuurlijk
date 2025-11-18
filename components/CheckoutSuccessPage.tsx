@@ -111,8 +111,11 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
         const currentUser = sessionData.session?.user;
         
         if (!currentUser) {
-          console.error('❌ No user session found');
-          throw new Error('Je moet ingelogd zijn om je betaling te verwerken. Log in en probeer het opnieuw.');
+          console.warn('⚠️ No user session found, redirecting to dashboard - webhook will handle upgrade');
+          // If user is not logged in, redirect to dashboard
+          // The webhook will handle the upgrade in the background
+          setCurrentView('dashboard');
+          return;
         }
         
         console.log('✅ User session found:', currentUser.id, currentUser.email);

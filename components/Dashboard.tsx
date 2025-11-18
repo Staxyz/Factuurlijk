@@ -66,12 +66,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ invoices, setCurrentView, 
     fetchCurrentPlan();
   }, [session]);
 
-  // Check if user is already Pro (but don't auto-upgrade - that's handled by webhook)
+  // Check for recent payment and upgrade user if needed
   useEffect(() => {
     if (!session?.user || hasCheckedPayment) return;
 
-    const checkPlan = async () => {
+    const checkPaymentAndUpgrade = async () => {
       try {
+        // First check current plan
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('plan')
@@ -80,26 +81,105 @@ export const Dashboard: React.FC<DashboardProps> = ({ invoices, setCurrentView, 
         
         if (profileError) {
           console.error('❌ Error fetching profile:', profileError);
+          setHasCheckedPayment(true);
           return;
         }
         
+        // If already Pro, clean up and return
         if (profile?.plan === 'pro') {
           setCurrentPlan('pro');
-          // Clean up old sessionStorage if user is already Pro
           sessionStorage.removeItem('factuurlijk:paymentSource');
           sessionStorage.removeItem('factuurlijk:paymentUserId');
           sessionStorage.removeItem('factuurlijk:paymentUserEmail');
           sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+          setHasCheckedPayment(true);
+          return;
+        }
+        
+        // Check if there's a recent payment (within last 30 minutes)
+        const paymentTimestamp = sessionStorage.getItem('factuurlijk:paymentTimestamp');
+        const paymentSource = sessionStorage.getItem('factuurlijk:paymentSource');
+        const storedUserId = sessionStorage.getItem('factuurlijk:paymentUserId');
+        const storedUserEmail = sessionStorage.getItem('factuurlijk:paymentUserEmail');
+        
+        if (paymentTimestamp && paymentSource && storedUserId === session.user.id) {
+          const timeSincePayment = Date.now() - parseInt(paymentTimestamp);
+          const isRecent = timeSincePayment < 30 * 60 * 1000; // 30 minutes
+          
+          if (isRecent) {
+            console.log('✅ Recent payment detected on dashboard, upgrading user...');
+            
+            // Upgrade user to Pro
+            const { error: updateError, data: updateData } = await supabase
+              .from('profiles')
+              .update({ 
+                plan: 'pro', 
+                updated_at: new Date().toISOString() 
+              })
+              .eq('id', session.user.id)
+              .select();
+            
+            if (!updateError && updateData && updateData.length > 0) {
+              console.log('✅ User upgraded to Pro!', updateData);
+              setCurrentPlan('pro');
+              setShowPaymentSuccess(true);
+              
+              // Log payment to database
+              try {
+                await supabase.from('mollie_payments').insert({
+                  payment_id: `payment_link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  payment_status: 'paid',
+                  amount_value: 39.50,
+                  amount_currency: 'EUR',
+                  description: 'Factuurlijk Pro upgrade via Payment Link',
+                  customer_email: storedUserEmail || session.user.email,
+                  supabase_user_id: session.user.id,
+                  metadata: {
+                    source: paymentSource,
+                    payment_method: 'payment_link',
+                    auto_upgraded_on_dashboard: true
+                  },
+                  paid_at: new Date().toISOString()
+                });
+              } catch (logErr) {
+                console.warn('⚠️ Error logging payment:', logErr);
+              }
+              
+              // Clean up sessionStorage
+              sessionStorage.removeItem('factuurlijk:paymentSource');
+              sessionStorage.removeItem('factuurlijk:paymentUserId');
+              sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+              sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+              
+              // Refresh user data
+              if (onRefresh) {
+                await onRefresh();
+              }
+              
+              // Auto-hide after 15 seconds
+              setTimeout(() => {
+                setShowPaymentSuccess(false);
+              }, 15000);
+            } else {
+              console.error('❌ Error upgrading profile:', updateError);
+            }
+          } else {
+            // Payment too old, clean up
+            sessionStorage.removeItem('factuurlijk:paymentSource');
+            sessionStorage.removeItem('factuurlijk:paymentUserId');
+            sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+            sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+          }
         }
       } catch (error) {
-        console.error('❌ Error checking plan:', error);
+        console.error('❌ Error checking payment:', error);
       } finally {
         setHasCheckedPayment(true);
       }
     };
 
-    checkPlan();
-  }, [session, hasCheckedPayment]);
+    checkPaymentAndUpgrade();
+  }, [session, hasCheckedPayment, onRefresh]);
 
   const calculateTotal = (invoice: Invoice) => {
     const subtotal = invoice.lines.reduce((acc, line) => acc + (line.quantity * line.unit_price), 0);

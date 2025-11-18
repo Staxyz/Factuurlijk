@@ -16,15 +16,17 @@ Na betaling kom je op de Mollie status pagina: `https://payment-links.mollie.com
 
    **Voor productie (Vercel):**
    ```
-   https://factuurlijk.vercel.app/#/checkout-success
+   https://factuurlijk.vercel.app/#/dashboard
    ```
 
    **Voor localhost (testing):**
    ```
-   http://localhost:3000/#/checkout-success
+   http://localhost:3000/#/dashboard
    ```
 
 3. **Sla op**
+
+**BELANGRIJK:** De redirect URL moet naar het dashboard gaan (`/#/dashboard`). Het dashboard detecteert automatisch wanneer je terugkomt na betaling en upgrade je account naar Pro.
 
 ### Stap 3: Verifieer Webhook
 Zorg dat de webhook URL ook correct is ingesteld:
@@ -36,13 +38,12 @@ Zorg dat de webhook URL ook correct is ingesteld:
 1. Gebruiker klikt "Upgrade naar Pro"
 2. Gebruiker wordt doorgestuurd naar Mollie
 3. Gebruiker betaalt
-4. **Mollie redirect naar:** `https://factuurlijk.vercel.app/#/checkout-success`
-5. **CheckoutSuccessPage detecteert:**
-   - Payment link ID uit sessionStorage
-   - Verifieert betaling via `/api/verify-payment-link`
-   - Upgrade account naar Pro
-   - Toont success melding
-   - Redirect naar dashboard na 5 seconden
+4. **Mollie redirect naar:** `https://factuurlijk.vercel.app/#/dashboard`
+5. **Dashboard detecteert automatisch:**
+   - Recente betaling via sessionStorage (binnen 30 minuten)
+   - Upgrade account direct naar Pro
+   - Toont success melding op dashboard
+   - Webhook verwerkt betaling op de achtergrond
 
 ## Als Redirect URL niet werkt
 

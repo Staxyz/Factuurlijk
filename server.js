@@ -125,19 +125,52 @@ const syncPaymentToSupabase = async (payment) => {
     // Try to find user by email if no user_id in metadata
     if (!targetUserId && customerEmail) {
       console.log('🔍 Looking up user by email:', customerEmail);
+      
+      // First try profiles table
       const { data: profileMatch, error: profileError } = await supabaseAdmin
         .from('profiles')
         .select('id, email')
-        .eq('email', customerEmail)
+        .eq('email', customerEmail.toLowerCase().trim())
         .maybeSingle();
 
       if (profileError) {
         console.error('❌ Error looking up profile:', profileError);
       } else if (profileMatch?.id) {
         targetUserId = profileMatch.id;
-        console.log('✅ Found user by email:', targetUserId);
+        console.log('✅ Found user by email in profiles:', targetUserId);
       } else {
-        console.warn('⚠️ No profile found for email:', customerEmail);
+        // If not found in profiles, try auth.users table
+        console.log('🔍 Email not found in profiles, trying auth.users...');
+        try {
+          const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+          if (!authError && authUsers?.users) {
+            const matchingUser = authUsers.users.find(u => 
+              u.email?.toLowerCase().trim() === customerEmail.toLowerCase().trim()
+            );
+            if (matchingUser) {
+              console.log('✅ Found user in auth.users:', matchingUser.id);
+              // Check if profile exists for this user
+              const { data: profileForAuthUser } = await supabaseAdmin
+                .from('profiles')
+                .select('id')
+                .eq('id', matchingUser.id)
+                .maybeSingle();
+              
+              if (profileForAuthUser?.id) {
+                targetUserId = matchingUser.id;
+                console.log('✅ Using user ID from auth.users:', targetUserId);
+              } else {
+                console.warn('⚠️ User found in auth.users but no profile exists');
+              }
+            }
+          }
+        } catch (authLookupError) {
+          console.warn('⚠️ Could not search auth.users:', authLookupError);
+        }
+        
+        if (!targetUserId) {
+          console.warn('⚠️ No profile found for email:', customerEmail);
+        }
       }
     }
 
@@ -220,11 +253,22 @@ const syncPaymentToSupabase = async (payment) => {
       console.log('   Logged event:', JSON.stringify(logData[0], null, 2));
     }
 
-    return { supabaseUserId: targetUserId, customerEmail };
+    // Return result with user ID for webhook to confirm upgrade
+    return {
+      supabaseUserId: targetUserId,
+      customerEmail: customerEmail,
+      error: targetUserId ? null : (customerEmail ? 'No user found for email: ' + customerEmail : 'No customer email provided'),
+      upgradeSuccess: targetUserId && payment.status === 'paid'
+    };
   } catch (error) {
     console.error('❌ Failed to sync payment to Supabase:', error);
     console.error('   Full error:', JSON.stringify(error, null, 2));
-    return { supabaseUserId: null, error };
+    return { 
+      supabaseUserId: null, 
+      customerEmail: null,
+      error: error.message || 'Unknown error',
+      upgradeSuccess: false
+    };
   }
 };
 
@@ -385,7 +429,15 @@ app.post('/api/mollie-webhook', async (req, res) => {
     
     // Try to get customer email from payment
     let customerEmail = null;
-    if (payment.customerId) {
+    
+    // Method 1: From payment metadata
+    if (payment.metadata?.customer_email) {
+      customerEmail = payment.metadata.customer_email;
+      console.log('📧 Customer email from payment metadata:', customerEmail);
+    }
+    
+    // Method 2: From Mollie customer object
+    if (!customerEmail && payment.customerId) {
       try {
         const customer = await mollieClient.customers.get(payment.customerId);
         customerEmail = customer.email;
@@ -395,26 +447,38 @@ app.post('/api/mollie-webhook', async (req, res) => {
       }
     }
     
+    // Method 3: From payment details (some payment methods include email)
+    if (!customerEmail && payment.details?.consumerEmail) {
+      customerEmail = payment.details.consumerEmail;
+      console.log('📧 Customer email from payment details:', customerEmail);
+    }
+    
+    // Add customer email to payment metadata if we found it
+    if (customerEmail && !payment.metadata?.customer_email) {
+      payment.metadata = {
+        ...(payment.metadata || {}),
+        customer_email: customerEmail
+      };
+    }
+    
     // Process payment based on status
     if (payment.status === 'paid') {
       console.log('✅ Payment is paid, syncing to Supabase...');
-      
-      // Add customer email to payment metadata if not present
-      if (customerEmail && !payment.metadata?.customer_email) {
-        payment.metadata = {
-          ...(payment.metadata || {}),
-          customer_email: customerEmail
-        };
-      }
+      console.log('   Payment ID:', payment.id);
+      console.log('   Amount:', payment.amount?.value, payment.amount?.currency);
+      console.log('   Customer email:', customerEmail || 'NOT FOUND');
       
       const syncResult = await syncPaymentToSupabase(payment);
       
       if (syncResult.supabaseUserId) {
-        console.log('✅ Payment synced successfully! User upgraded:', syncResult.supabaseUserId);
+        console.log('✅ Payment synced successfully! User upgraded to Pro:', syncResult.supabaseUserId);
+        console.log('   User email:', syncResult.customerEmail);
       } else {
-        console.warn('⚠️ Payment synced but no user ID found:', syncResult.error);
+        console.warn('⚠️ Payment synced but no user ID found');
+        console.warn('   Error:', syncResult.error);
         console.warn('   Payment metadata:', JSON.stringify(payment.metadata, null, 2));
         console.warn('   Customer email:', customerEmail);
+        console.warn('   TIP: Zorg dat het email adres in Mollie overeenkomt met het email in Supabase');
       }
     } else {
       console.log(`ℹ️  Payment status is "${payment.status}", not processing (only "paid" status is processed)`);
