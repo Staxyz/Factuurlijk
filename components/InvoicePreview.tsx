@@ -9,10 +9,28 @@ interface InvoicePreviewProps {
   templateCustomizations?: TemplateCustomizations | null;
   isPdfMode?: boolean;
   previewSize?: 'small' | 'medium' | 'large';
+  btwIncluded?: boolean; // Whether prices include VAT
 }
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(amount);
+};
+
+// Calculate BTW and totals based on whether prices include VAT
+const calculateBtwAndTotal = (subtotal: number, btwPercentage: number, btwIncluded: boolean = false) => {
+  if (btwIncluded) {
+    // Prices include VAT: calculate VAT amount and exclusive subtotal
+    const btwMultiplier = 1 + (btwPercentage / 100);
+    const subtotalExclBtw = subtotal / btwMultiplier;
+    const btwAmount = subtotal - subtotalExclBtw;
+    const total = subtotal; // Total is the same as subtotal when VAT is included
+    return { subtotalExclBtw, btwAmount, total };
+  } else {
+    // Prices exclude VAT: calculate VAT amount and total
+    const btwAmount = subtotal * (btwPercentage / 100);
+    const total = subtotal + btwAmount;
+    return { subtotalExclBtw: subtotal, btwAmount, total };
+  }
 };
 
 const getCurrencyFontSizeClass = (amount: number): string => {
@@ -69,6 +87,52 @@ const formatDate = (dateString: string) => {
         month: 'short',
         year: 'numeric',
     });
+};
+
+// Helper function to calculate discount for a line
+const calculateLineDiscount = (line: Invoice['lines'][0]): number => {
+    const lineSubtotal = (line.quantity || 0) * (line.unit_price || 0);
+    
+    if (line.discount_type === 'euros' && line.discount_amount) {
+        return line.discount_amount;
+    } else if (line.discount_type === 'percentage' || !line.discount_type) {
+        // Default to percentage for backwards compatibility
+        return lineSubtotal * ((line.discount_percentage || 0) / 100);
+    }
+    
+    return 0;
+};
+
+// Helper function to format discount display
+const formatDiscount = (line: Invoice['lines'][0]): string => {
+    if (line.discount_type === 'euros' && line.discount_amount) {
+        return formatCurrency(line.discount_amount);
+    } else if (line.discount_type === 'percentage' || !line.discount_type) {
+        return line.discount_percentage ? `${line.discount_percentage}%` : '-';
+    }
+    return '-';
+};
+
+// Helper function to check if invoice has any discounts
+const hasDiscounts = (lines: Invoice['lines']): boolean => {
+    return lines.some(line => {
+        if (line.discount_type === 'euros' && line.discount_amount && line.discount_amount > 0) {
+            return true;
+        }
+        if ((line.discount_type === 'percentage' || !line.discount_type) && line.discount_percentage && line.discount_percentage > 0) {
+            return true;
+        }
+        return false;
+    });
+};
+
+// Helper function to calculate subtotal with discounts
+const calculateSubtotalWithDiscounts = (lines: Invoice['lines']): number => {
+    return lines.reduce((acc, line) => {
+        const lineSubtotal = (line.quantity || 0) * (line.unit_price || 0);
+        const discount = calculateLineDiscount(line);
+        return acc + (lineSubtotal - discount);
+    }, 0);
 };
 
 const getDynamicStyling = (lineCount: number, templateStyle: TemplateStyle, isPdfMode?: boolean, previewSize?: 'small' | 'medium' | 'large') => {
@@ -248,17 +312,16 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = (props) => {
 // Template Implementations
 
 function MinimalistTemplate(props: InvoicePreviewProps) {
-  const { invoice, userProfile, templateCustomizations, isPdfMode, previewSize } = props;
-  const subtotal = invoice.lines.reduce((acc, line) => acc + (line.quantity * line.unit_price * (1 - ((line.discount_percentage || 0) / 100))), 0);
-  const btwAmount = subtotal * (invoice.btw_percentage / 100);
-  const total = subtotal + btwAmount;
+  const { invoice, userProfile, templateCustomizations, isPdfMode, previewSize, btwIncluded = false } = props;
+  const subtotal = calculateSubtotalWithDiscounts(invoice.lines);
+  const { subtotalExclBtw, btwAmount, total } = calculateBtwAndTotal(subtotal, invoice.btw_percentage, btwIncluded);
   const { customer } = invoice;
   const { fontSizeClass, paddingClass } = getDynamicStyling(invoice.lines.length, props.templateStyle || 'minimalist', isPdfMode, previewSize);
   const primaryColor = templateCustomizations?.primary_color;
   const footerText = getProcessedFooterText(userProfile);
   const fontClass = fontClasses[templateCustomizations?.font || 'mono'];
   const pagePaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-6' : 'p-4';
-  const hasDiscounts = invoice.lines.some(line => line.discount_percentage && line.discount_percentage > 0);
+  const invoiceHasDiscounts = hasDiscounts(invoice.lines);
   
   // Calculate dynamic font sizes for email and date sections
   const emailSectionFontSize = getEmailSectionFontSize(userProfile.email || '', customer?.email || '', fontSizeClass);
@@ -319,20 +382,21 @@ function MinimalistTemplate(props: InvoicePreviewProps) {
                   <th className={`${paddingClass} font-semibold uppercase text-gray-500 text-[0.8em] w-[40%]`}>Omschrijving</th>
                   <th className={`${paddingClass} text-center font-semibold uppercase text-gray-500 text-[0.8em]`}>Aantal</th>
                   <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 text-[0.8em]`}>Prijs</th>
-                  {hasDiscounts && <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 text-[0.8em]`}>Korting</th>}
+                  {invoiceHasDiscounts && <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 text-[0.8em]`}>Korting</th>}
                   <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 text-[0.8em]`}>Totaal</th>
                 </tr>
               </thead>
               <tbody>
                 {invoice.lines.map((line) => {
-                  const lineTotal = line.quantity * line.unit_price;
-                  const discountedTotal = lineTotal * (1 - ((line.discount_percentage || 0) / 100));
+                  const lineSubtotal = (line.quantity || 0) * (line.unit_price || 0);
+                  const discount = calculateLineDiscount(line);
+                  const discountedTotal = lineSubtotal - discount;
                   return (
                     <tr key={line.id} className="border-b border-gray-200">
                       <td className={`${paddingClass} break-words`}>{line.description || <span className="text-gray-400">...</span>}</td>
                       <td className={`${paddingClass} text-center`}>{line.quantity}</td>
                       <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(line.unit_price)}>{formatCurrency(line.unit_price)}</span></td>
-                      {hasDiscounts && <td className={`${paddingClass} text-right`}>{line.discount_percentage ? `${line.discount_percentage}%` : '-'}</td>}
+                      {invoiceHasDiscounts && <td className={`${paddingClass} text-right`}>{formatDiscount(line)}</td>}
                       <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(discountedTotal)}>{formatCurrency(discountedTotal)}</span></td>
                     </tr>
                   );
@@ -370,17 +434,16 @@ function MinimalistTemplate(props: InvoicePreviewProps) {
 }
 
 function CorporateTemplate(props: InvoicePreviewProps) {
-  const { invoice, userProfile, templateCustomizations, isPdfMode, previewSize } = props;
-  const subtotal = invoice.lines.reduce((acc, line) => acc + (line.quantity * line.unit_price * (1 - ((line.discount_percentage || 0) / 100))), 0);
-  const btwAmount = subtotal * (invoice.btw_percentage / 100);
-  const total = subtotal + btwAmount;
+  const { invoice, userProfile, templateCustomizations, isPdfMode, previewSize, btwIncluded = false } = props;
+  const subtotal = calculateSubtotalWithDiscounts(invoice.lines);
+  const { subtotalExclBtw, btwAmount, total } = calculateBtwAndTotal(subtotal, invoice.btw_percentage, btwIncluded);
   const { customer } = invoice;
   const { fontSizeClass, paddingClass } = getDynamicStyling(invoice.lines.length, props.templateStyle || 'corporate', isPdfMode, previewSize);
   const primaryColor = templateCustomizations?.primary_color || '#4b5563';
   const footerText = getProcessedFooterText(userProfile);
   const fontClass = fontClasses[templateCustomizations?.font || 'sans'];
   const pagePaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-6' : 'p-4';
-  const hasDiscounts = invoice.lines.some(line => line.discount_percentage && line.discount_percentage > 0);
+  const invoiceHasDiscounts = hasDiscounts(invoice.lines);
   
   // Calculate dynamic font sizes for email and date sections
   const emailSectionFontSize = getEmailSectionFontSize('', customer?.email || '', fontSizeClass);
@@ -439,7 +502,7 @@ function CorporateTemplate(props: InvoicePreviewProps) {
                   <th className={`${paddingClass} font-bold uppercase text-[0.8em] w-[40%]`}>Omschrijving</th>
                   <th className={`${paddingClass} text-right font-bold uppercase text-[0.8em]`}>Prijs</th>
                   <th className={`${paddingClass} text-center font-bold uppercase text-[0.8em]`}>Aantal</th>
-                  {hasDiscounts && <th className={`${paddingClass} text-center font-bold uppercase text-[0.8em]`}>Korting</th>}
+                  {invoiceHasDiscounts && <th className={`${paddingClass} text-center font-bold uppercase text-[0.8em]`}>Korting</th>}
                   <th className={`${paddingClass} text-right font-bold uppercase text-[0.8em]`}>Totaal</th>
                 </tr>
               </thead>
@@ -452,7 +515,7 @@ function CorporateTemplate(props: InvoicePreviewProps) {
                       <td className={`${paddingClass} break-words`}>{line.description || '...'}</td>
                       <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(line.unit_price)}>{formatCurrency(line.unit_price)}</span></td>
                       <td className={`${paddingClass} text-center`}>{line.quantity}</td>
-                      {hasDiscounts && <td className={`${paddingClass} text-center`}>{line.discount_percentage ? `${line.discount_percentage}%` : '-'}</td>}
+                      {invoiceHasDiscounts && <td className={`${paddingClass} text-center`}>{formatDiscount(line)}</td>}
                       <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(discountedTotal)}>{formatCurrency(discountedTotal)}</span></td>
                     </tr>
                   );
@@ -491,7 +554,7 @@ function CorporateTemplate(props: InvoicePreviewProps) {
 
 function CreativeTemplate(props: InvoicePreviewProps) {
     const { invoice, userProfile, templateCustomizations, isPdfMode, previewSize } = props;
-    const subtotal = invoice.lines.reduce((acc, line) => acc + (line.quantity * line.unit_price * (1 - ((line.discount_percentage || 0) / 100))), 0);
+    const subtotal = calculateSubtotalWithDiscounts(invoice.lines);
     const btwAmount = subtotal * (invoice.btw_percentage / 100);
     const total = subtotal + btwAmount;
     const { customer } = invoice;
@@ -500,7 +563,7 @@ function CreativeTemplate(props: InvoicePreviewProps) {
     const footerText = getProcessedFooterText(userProfile);
     const fontClass = fontClasses[templateCustomizations?.font || 'sans'];
     const pagePaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-8' : 'p-6';
-    const hasDiscounts = invoice.lines.some(line => line.discount_percentage && line.discount_percentage > 0);
+    const invoiceHasDiscounts = hasDiscounts(invoice.lines);
 
     // Calculate dynamic font sizes for email and date sections
     const emailSectionFontSize = getEmailSectionFontSize(userProfile.email || '', customer?.email || '', fontSizeClass);
@@ -558,7 +621,7 @@ function CreativeTemplate(props: InvoicePreviewProps) {
                       <th className={`${paddingClass} font-bold rounded-tl-lg w-[40%]`}>Omschrijving</th>
                       <th className={`${paddingClass} text-right font-bold`}>Prijs</th>
                       <th className={`${paddingClass} text-center font-bold`}>Aantal</th>
-                      {hasDiscounts && <th className={`${paddingClass} text-center font-bold`}>Korting</th>}
+                      {invoiceHasDiscounts && <th className={`${paddingClass} text-center font-bold`}>Korting</th>}
                       <th className={`${paddingClass} text-right font-bold rounded-tr-lg`}>Totaal</th>
                     </tr>
                   </thead>
@@ -570,7 +633,7 @@ function CreativeTemplate(props: InvoicePreviewProps) {
                         <td className={`${paddingClass} font-semibold break-words`}>{line.description || '...'}</td>
                         <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(line.unit_price)}>{formatCurrency(line.unit_price)}</span></td>
                         <td className={`${paddingClass} text-center`}>{line.quantity}</td>
-                        {hasDiscounts && <td className={`${paddingClass} text-center`}>{line.discount_percentage ? `${line.discount_percentage}%` : '-'}</td>}
+                        {invoiceHasDiscounts && <td className={`${paddingClass} text-center`}>{formatDiscount(line)}</td>}
                         <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(discountedTotal)}>{formatCurrency(discountedTotal)}</span></td>
                       </tr>
                       );
@@ -603,14 +666,14 @@ function CreativeTemplate(props: InvoicePreviewProps) {
 
 function SidebarTemplate(props: InvoicePreviewProps) {
   const { invoice, userProfile, isPdfMode, previewSize, templateCustomizations } = props;
-  const subtotal = invoice.lines.reduce((acc, line) => acc + (line.quantity * line.unit_price * (1 - ((line.discount_percentage || 0) / 100))), 0);
+  const subtotal = calculateSubtotalWithDiscounts(invoice.lines);
   const btwAmount = subtotal * (invoice.btw_percentage / 100);
   const total = subtotal + btwAmount;
   const { customer } = invoice;
   const { fontSizeClass, paddingClass } = getDynamicStyling(invoice.lines.length, props.templateStyle || 'sidebar', isPdfMode, previewSize);
   const footerText = getProcessedFooterText(userProfile);
   const pagePaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-6' : 'p-4';
-  const hasDiscounts = invoice.lines.some(line => line.discount_percentage && line.discount_percentage > 0);
+  const invoiceHasDiscounts = hasDiscounts(invoice.lines);
   const fontClass = fontClasses[templateCustomizations?.font || 'sans'];
 
   // Calculate dynamic font sizes for email and date sections
@@ -677,22 +740,24 @@ function SidebarTemplate(props: InvoicePreviewProps) {
             <table className="w-full text-left table-fixed">
                 <thead className="sticky top-0 bg-white z-10">
                 <tr className="border-b border-gray-300">
-                    <th className={`${paddingClass} font-semibold uppercase text-gray-500 ${hasDiscounts ? 'w-[40%]' : 'w-[50%]'}`}>Omschrijving</th>
+                    <th className={`${paddingClass} font-semibold uppercase text-gray-500 ${invoiceHasDiscounts ? 'w-[40%]' : 'w-[50%]'}`}>Omschrijving</th>
                     <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 w-[20%]`}>Prijs</th>
                     <th className={`${paddingClass} text-center font-semibold uppercase text-gray-500 w-[10%]`}>Aantal</th>
-                    {hasDiscounts && <th className={`${paddingClass} text-center font-semibold uppercase text-gray-500 w-[10%]`}>Korting</th>}
+                    {invoiceHasDiscounts && <th className={`${paddingClass} text-center font-semibold uppercase text-gray-500 w-[10%]`}>Korting</th>}
                     <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 w-[20%]`}>Totaal</th>
                 </tr>
                 </thead>
                 <tbody>
                 {invoice.lines.map((line) => {
-                    const discountedTotal = (line.quantity * line.unit_price) * (1 - ((line.discount_percentage || 0) / 100));
+                    const lineSubtotal = (line.quantity || 0) * (line.unit_price || 0);
+                    const discount = calculateLineDiscount(line);
+                    const discountedTotal = lineSubtotal - discount;
                     return (
                         <tr key={line.id} className="border-b border-gray-100">
                             <td className={`${paddingClass} break-words`}>{line.description || '...'}</td>
                             <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(line.unit_price)}>{formatCurrency(line.unit_price)}</span></td>
                             <td className={`${paddingClass} text-center`}>{line.quantity}</td>
-                            {hasDiscounts && <td className={`${paddingClass} text-center`}>{line.discount_percentage ? `${line.discount_percentage}%` : '-'}</td>}
+                            {invoiceHasDiscounts && <td className={`${paddingClass} text-center`}>{formatDiscount(line)}</td>}
                             <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(discountedTotal)}>{formatCurrency(discountedTotal)}</span></td>
                         </tr>
                     );
@@ -729,17 +794,16 @@ function SidebarTemplate(props: InvoicePreviewProps) {
 }
 
 function ElegantTemplate(props: InvoicePreviewProps) {
-    const { invoice, userProfile, templateCustomizations, isPdfMode, previewSize } = props;
-    const subtotal = invoice.lines.reduce((acc, line) => acc + (line.quantity * line.unit_price * (1 - ((line.discount_percentage || 0) / 100))), 0);
-    const btwAmount = subtotal * (invoice.btw_percentage / 100);
-    const total = subtotal + btwAmount;
+  const { invoice, userProfile, templateCustomizations, isPdfMode, previewSize, btwIncluded = false } = props;
+    const subtotal = calculateSubtotalWithDiscounts(invoice.lines);
+    const { subtotalExclBtw, btwAmount, total } = calculateBtwAndTotal(subtotal, invoice.btw_percentage, btwIncluded);
     const { customer } = invoice;
     const { fontSizeClass, paddingClass } = getDynamicStyling(invoice.lines.length, props.templateStyle || 'elegant', isPdfMode, previewSize);
     const primaryColor = templateCustomizations?.primary_color || '#333333';
     const footerText = getProcessedFooterText(userProfile);
     const fontClass = fontClasses[templateCustomizations?.font || 'serif'];
     const pagePaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-8' : 'p-6';
-    const hasDiscounts = invoice.lines.some(line => line.discount_percentage && line.discount_percentage > 0);
+    const invoiceHasDiscounts = hasDiscounts(invoice.lines);
   
   // Calculate dynamic font sizes for email and date sections
   const emailSectionFontSize = getEmailSectionFontSize(userProfile.email || '', customer?.email || '', fontSizeClass);
@@ -791,7 +855,7 @@ function ElegantTemplate(props: InvoicePreviewProps) {
                       <th className={`${paddingClass} font-semibold uppercase text-[0.8em] w-[40%]`}>Item Omschrijving</th>
                       <th className={`${paddingClass} text-center font-semibold uppercase text-[0.8em]`}>Aantal</th>
                       <th className={`${paddingClass} text-right font-semibold uppercase text-[0.8em]`}>Prijs</th>
-                      {hasDiscounts && <th className={`${paddingClass} text-right font-semibold uppercase text-[0.8em]`}>Korting</th>}
+                      {invoiceHasDiscounts && <th className={`${paddingClass} text-right font-semibold uppercase text-[0.8em]`}>Korting</th>}
                       <th className={`${paddingClass} text-right font-semibold uppercase text-[0.8em]`}>Totaal</th>
                     </tr>
                   </thead>
@@ -803,7 +867,7 @@ function ElegantTemplate(props: InvoicePreviewProps) {
                         <td className={`${paddingClass} font-bold break-words`}>{line.description || '...'}</td>
                         <td className={`${paddingClass} text-center`}>{line.quantity}</td>
                         <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(line.unit_price)}>{formatCurrency(line.unit_price)}</span></td>
-                        {hasDiscounts && <td className={`${paddingClass} text-right`}>{line.discount_percentage ? `${line.discount_percentage}%` : '-'}</td>}
+                        {invoiceHasDiscounts && <td className={`${paddingClass} text-right`}>{formatDiscount(line)}</td>}
                         <td className={`${paddingClass} text-right font-bold whitespace-nowrap`}><span className={getCurrencyFontSizeClass(discountedTotal)}>{formatCurrency(discountedTotal)}</span></td>
                       </tr>
                       );
@@ -836,7 +900,7 @@ function ElegantTemplate(props: InvoicePreviewProps) {
 
 function WaveTemplate(props: InvoicePreviewProps) {
     const { invoice, userProfile, templateCustomizations, isPdfMode, previewSize } = props;
-    const subtotal = invoice.lines.reduce((acc, line) => acc + (line.quantity * line.unit_price * (1 - ((line.discount_percentage || 0) / 100))), 0);
+    const subtotal = calculateSubtotalWithDiscounts(invoice.lines);
     const btwAmount = subtotal * (invoice.btw_percentage / 100);
     const total = subtotal + btwAmount;
     const { customer } = invoice;
@@ -846,7 +910,7 @@ function WaveTemplate(props: InvoicePreviewProps) {
     const fontClass = fontClasses[templateCustomizations?.font || 'sans'];
     const pageHeaderMainPaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-8' : 'p-6';
     const footerPaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-6' : 'p-4';
-    const hasDiscounts = invoice.lines.some(line => line.discount_percentage && line.discount_percentage > 0);
+    const invoiceHasDiscounts = hasDiscounts(invoice.lines);
     
     // Calculate dynamic font sizes for email and date sections
     const emailSectionFontSize = getEmailSectionFontSize('', customer?.email || '', fontSizeClass);
@@ -912,7 +976,7 @@ function WaveTemplate(props: InvoicePreviewProps) {
                           <th className={`${paddingClass} font-bold w-[40%]`}>Omschrijving</th>
                           <th className={`${paddingClass} text-right font-bold`}>Prijs</th>
                           <th className={`${paddingClass} text-center font-bold`}>Aantal</th>
-                           {hasDiscounts && <th className={`${paddingClass} text-center font-bold`}>Korting</th>}
+                           {invoiceHasDiscounts && <th className={`${paddingClass} text-center font-bold`}>Korting</th>}
                           <th className={`${paddingClass} text-right font-bold`}>Totaal</th>
                         </tr>
                     </thead>
@@ -925,7 +989,7 @@ function WaveTemplate(props: InvoicePreviewProps) {
                             <td className={`${paddingClass} break-words`}>{line.description || '...'}</td>
                             <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(line.unit_price)}>{formatCurrency(line.unit_price)}</span></td>
                             <td className={`${paddingClass} text-center`}>{line.quantity}</td>
-                            {hasDiscounts && <td className={`${paddingClass} text-center`}>{line.discount_percentage ? `${line.discount_percentage}%` : '-'}</td>}
+                            {invoiceHasDiscounts && <td className={`${paddingClass} text-center`}>{formatDiscount(line)}</td>}
                             <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(discountedTotal)}>{formatCurrency(discountedTotal)}</span></td>
                           </tr>
                           );

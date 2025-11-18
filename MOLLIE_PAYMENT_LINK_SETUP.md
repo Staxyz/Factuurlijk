@@ -21,25 +21,46 @@ Om ervoor te zorgen dat gebruikers automatisch worden doorgestuurd na betaling, 
    
    **Voor localhost (testing):**
    ```
-   http://localhost:3000/#/checkout-success
+   http://localhost:3000/#/dashboard
    ```
    
    **Voor productie (Vercel):**
    ```
-   https://jouw-vercel-url.vercel.app/#/checkout-success
+   https://jouw-vercel-url.vercel.app/#/dashboard
    ```
    *(Vervang `jouw-vercel-url` met je echte Vercel URL)*
+   
+   **BELANGRIJK:** De redirect URL moet naar het dashboard gaan (`/#/dashboard`). Het dashboard detecteert automatisch wanneer je terugkomt na betaling en upgrade je account naar Pro.
 
-5. **Sla de wijzigingen op**
+5. **Stel de Webhook URL in (optioneel maar aanbevolen):**
+   
+   **Voor localhost (testing):**
+   ```
+   http://localhost:3001/api/mollie-webhook
+   ```
+   
+   **Voor productie:**
+   ```
+   https://jouw-backend-url.vercel.app/api/mollie-webhook
+   ```
+   *(Dit zorgt ervoor dat betalingen automatisch worden verwerkt, zelfs als de gebruiker niet wordt doorgestuurd)*
+
+6. **Sla de wijzigingen op**
 
 ### Wat gebeurt er na betaling?
 
-1. Gebruiker betaalt via de Mollie Payment Link
-2. Mollie redirect naar: `http://localhost:3000/#/checkout-success`
-3. De app detecteert de return en:
-   - Logt de betaling in de `mollie_payments` tabel
-   - Upgrade het account naar Pro
-   - Redirect automatisch naar dashboard na 5 seconden
+1. Gebruiker klikt op "Upgrade naar Pro" op de Upgrade pagina
+2. App slaat betalingsinfo op in sessionStorage (user ID, email, timestamp, source)
+3. Gebruiker wordt doorgestuurd naar Mollie Payment Link
+4. Gebruiker betaalt via Mollie
+5. Mollie redirect naar: `http://localhost:3000/#/dashboard` (of je Vercel URL)
+6. Het dashboard detecteert automatisch dat er een recente betaling is geweest (binnen 30 minuten) en:
+   - Controleert of de gebruiker nog niet Pro is
+   - Logt de betaling in de `mollie_payments` tabel in Supabase
+   - Upgrade het account automatisch naar Pro in Supabase
+   - Toont een mooie success melding met alle Pro voordelen
+   - Verwijdert de betalingsinfo uit sessionStorage
+7. De gebruiker ziet direct de success melding op het dashboard en heeft nu Pro toegang
 
 ### Troubleshooting
 

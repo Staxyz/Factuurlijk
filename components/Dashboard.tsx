@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import type { Invoice, View } from '../types';
 import type { Session } from '@supabase/supabase-js';
+import { supabase } from '../supabaseClient';
 
 interface DashboardProps {
   invoices: Invoice[];
@@ -8,6 +9,7 @@ interface DashboardProps {
   onViewInvoice: (invoiceId: string) => void;
   session: Session | null;
   isFreePlanLimitReached: boolean;
+  onRefresh?: () => void;
 }
 
 const formatCurrency = (amount: number) => {
@@ -35,8 +37,172 @@ const getStatusChip = (status: 'betaald' | 'open' | 'verlopen') => {
 };
 
 
-export const Dashboard: React.FC<DashboardProps> = ({ invoices, setCurrentView, onViewInvoice, session, isFreePlanLimitReached }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ invoices, setCurrentView, onViewInvoice, session, isFreePlanLimitReached, onRefresh }) => {
   const userName = session?.user?.user_metadata?.full_name?.split(' ')[0] || session?.user?.email;
+  const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
+  const [hasCheckedPayment, setHasCheckedPayment] = useState(false);
+  const [currentPlan, setCurrentPlan] = useState<string | null>(null);
+
+  // Fetch current plan on mount and when session changes
+  useEffect(() => {
+    const fetchCurrentPlan = async () => {
+      if (!session?.user) return;
+      
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('plan')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (!error && profile) {
+          setCurrentPlan(profile.plan || 'free');
+        }
+      } catch (error) {
+        console.error('Error fetching plan:', error);
+      }
+    };
+
+    fetchCurrentPlan();
+  }, [session]);
+
+  // Check for recent payment and upgrade user
+  useEffect(() => {
+    if (!session?.user || hasCheckedPayment) return;
+
+    const checkAndUpgrade = async () => {
+      try {
+        const paymentTimestamp = sessionStorage.getItem('factuurlijk:paymentTimestamp');
+        const paymentSource = sessionStorage.getItem('factuurlijk:paymentSource');
+        const storedUserId = sessionStorage.getItem('factuurlijk:paymentUserId');
+        
+        console.log('🔍 Checking for payment:', { paymentTimestamp, paymentSource, storedUserId, currentUserId: session.user.id });
+        
+        // Check if payment was initiated recently (within last 30 minutes to be safe)
+        if (paymentTimestamp && paymentSource && storedUserId === session.user.id) {
+          const timeSincePayment = Date.now() - parseInt(paymentTimestamp);
+          const isRecent = timeSincePayment < 30 * 60 * 1000; // 30 minutes
+          
+          if (isRecent) {
+            console.log('✅ Recent payment detected on dashboard, upgrading user...');
+            
+            // Check current plan first
+            const { data: profile, error: profileError } = await supabase
+              .from('profiles')
+              .select('plan')
+              .eq('id', session.user.id)
+              .single();
+            
+            if (profileError) {
+              console.error('❌ Error fetching profile:', profileError);
+              return;
+            }
+            
+            // If user is not Pro yet, upgrade them
+            if (profile && profile.plan !== 'pro') {
+              console.log('📝 Upgrading user to Pro after payment...');
+              
+              const storedUserEmail = sessionStorage.getItem('factuurlijk:paymentUserEmail');
+              
+              // Log payment to database first
+              try {
+                const { error: logError } = await supabase.from('mollie_payments').insert({
+                  payment_id: `payment_link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  payment_status: 'paid',
+                  amount_value: 39.50,
+                  amount_currency: 'EUR',
+                  description: 'Factuurlijk Pro upgrade via Payment Link',
+                  customer_email: storedUserEmail || session.user.email,
+                  supabase_user_id: session.user.id,
+                  metadata: {
+                    source: paymentSource,
+                    payment_method: 'payment_link',
+                    auto_detected_on_dashboard: true,
+                    upgraded_at: new Date().toISOString()
+                  },
+                  paid_at: new Date().toISOString()
+                });
+                
+                if (logError) {
+                  console.warn('⚠️ Could not log payment:', logError);
+                } else {
+                  console.log('✅ Payment logged to database');
+                }
+              } catch (logErr) {
+                console.warn('⚠️ Error logging payment:', logErr);
+              }
+              
+              // Upgrade to Pro
+              const { error: updateError, data: updateData } = await supabase
+                .from('profiles')
+                .update({ 
+                  plan: 'pro', 
+                  updated_at: new Date().toISOString() 
+                })
+                .eq('id', session.user.id)
+                .select();
+              
+              if (!updateError) {
+                console.log('✅ User upgraded to Pro!', updateData);
+                // Update plan state so the upgrade box disappears
+                setCurrentPlan('pro');
+                // Show success message
+                setShowPaymentSuccess(true);
+                // Refresh user data to update UI
+                if (onRefresh) {
+                  await onRefresh();
+                }
+                // Clean up sessionStorage after successful upgrade
+                sessionStorage.removeItem('factuurlijk:paymentSource');
+                sessionStorage.removeItem('factuurlijk:paymentUserId');
+                sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+                sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+                
+                // Auto-hide after 15 seconds (longer so user can read it)
+                setTimeout(() => {
+                  setShowPaymentSuccess(false);
+                }, 15000);
+              } else {
+                console.error('❌ Error upgrading profile:', updateError);
+                // Don't clean up sessionStorage if upgrade failed - user can try again
+              }
+            } else if (profile?.plan === 'pro') {
+              // Already Pro, update plan state and clean up
+              console.log('✅ User is already Pro, cleaning up sessionStorage');
+              setCurrentPlan('pro');
+              sessionStorage.removeItem('factuurlijk:paymentSource');
+              sessionStorage.removeItem('factuurlijk:paymentUserId');
+              sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+              sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+            }
+          } else {
+            // Payment too old, clean up
+            console.log('⚠️ Payment too old, cleaning up');
+            sessionStorage.removeItem('factuurlijk:paymentSource');
+            sessionStorage.removeItem('factuurlijk:paymentUserId');
+            sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+            sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+          }
+        } else {
+          console.log('ℹ️ No recent payment found in sessionStorage');
+        }
+      } catch (error) {
+        console.error('❌ Error checking payment:', error);
+      } finally {
+        setHasCheckedPayment(true);
+      }
+    };
+
+    // Check immediately and also after a short delay to catch any race conditions
+    checkAndUpgrade();
+    const timer = setTimeout(() => {
+      if (!hasCheckedPayment) {
+        checkAndUpgrade();
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [session, hasCheckedPayment]);
 
   const calculateTotal = (invoice: Invoice) => {
     const subtotal = invoice.lines.reduce((acc, line) => acc + (line.quantity * line.unit_price), 0);
@@ -67,8 +233,53 @@ export const Dashboard: React.FC<DashboardProps> = ({ invoices, setCurrentView, 
     }
   };
 
+
   return (
     <div>
+      {/* Payment Success Notification */}
+      {showPaymentSuccess && (
+        <div className="mb-6 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-lg p-4 sm:p-6 shadow-lg animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-green-500">
+                <svg className="h-6 w-6 sm:h-8 sm:w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            </div>
+            <div className="ml-4 flex-1">
+              <h3 className="text-xl sm:text-2xl font-bold text-green-800 mb-2">
+                🎉 Betaling voltooid!
+              </h3>
+              <p className="text-base sm:text-lg text-green-700 mb-3 font-semibold">
+                Je account is succesvol geupgrade naar <strong className="text-green-900">Pro</strong>!
+              </p>
+              <div className="bg-white/60 rounded-lg p-3 mb-3">
+                <p className="text-sm sm:text-base text-green-800 font-medium mb-2">Je hebt nu toegang tot:</p>
+                <ul className="list-disc list-inside text-sm sm:text-base text-green-700 space-y-1">
+                  <li>Onbeperkt facturen maken</li>
+                  <li>Onbeperkt klanten toevoegen</li>
+                  <li>Alle templates & personalisatie opties</li>
+                  <li>Uitgebreide rapportages en inzichten</li>
+                </ul>
+              </div>
+              <p className="text-xs sm:text-sm text-green-600 italic">
+                Deze melding verdwijnt automatisch over 15 seconden.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowPaymentSuccess(false)}
+              className="flex-shrink-0 ml-4 text-green-600 hover:text-green-800 transition-colors"
+              aria-label="Sluit melding"
+            >
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
         <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900">Dashboard</h1>

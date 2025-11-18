@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import type { Invoice, InvoiceLine, UserProfile, Customer } from '../types';
+import type { Invoice, InvoiceLine, UserProfile, Customer, RecurringInvoiceTemplate } from '../types';
 import { InvoicePreview } from './InvoicePreview';
+import { supabase } from '../supabaseClient';
 
 // A simple UUID generator to avoid external dependencies
 const uuidv4 = () => {
@@ -69,9 +70,9 @@ const newInvoiceTemplate = (invoices: Invoice[]): Omit<Invoice, 'id'> => ({
   invoice_number: getNextInvoiceNumber(invoices),
   invoice_date: new Date().toISOString().split('T')[0],
   due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-  customer: { name: '', address: '', city: '', email: '' },
+  customer: { name: '', address: '', city: '', email: '', kvk_number: '', btw_number: '' },
   status: 'open',
-  lines: [{ id: uuidv4(), description: '', quantity: 1, unit_price: 0 }],
+  lines: [{ id: uuidv4(), description: '', quantity: 1, unit_price: 0, discount_type: 'percentage', discount_amount: 0 }],
   btw_percentage: 21,
 });
 
@@ -107,7 +108,69 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
   
   const [totalAmount, setTotalAmount] = useState(0);
   const [isOverLimit, setIsOverLimit] = useState(false);
+  const [btwIncluded, setBtwIncluded] = useState(true); // Standaard inclusief BTW
   const MAX_INVOICE_TOTAL = 999_999_999; // Maximaal 9 cijfers
+  
+  // Customer type state
+  const [customerType, setCustomerType] = useState<'bedrijf' | 'persoon'>('bedrijf');
+  
+  // Recurring invoice state
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringInterval, setRecurringInterval] = useState<'weekly' | 'monthly' | 'quarterly' | 'yearly'>('monthly');
+  const [recurringStartDate, setRecurringStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [recurringEndDate, setRecurringEndDate] = useState<string | null>(null);
+  const [recurringTemplates, setRecurringTemplates] = useState<RecurringInvoiceTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+
+  // Load recurring templates when component mounts or when isRecurring changes
+  useEffect(() => {
+    const loadRecurringTemplates = async () => {
+      if (!isRecurring || !userProfile.id) return;
+      
+      setLoadingTemplates(true);
+      try {
+        const { data, error } = await supabase
+          .from('recurring_invoice_templates')
+          .select('*')
+          .eq('user_id', userProfile.id)
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        setRecurringTemplates(data || []);
+      } catch (error) {
+        console.error('Error loading recurring templates:', error);
+      } finally {
+        setLoadingTemplates(false);
+      }
+    };
+    
+    loadRecurringTemplates();
+  }, [isRecurring, userProfile.id]);
+
+  // Load template data when selected
+  useEffect(() => {
+    if (selectedTemplateId && recurringTemplates.length > 0) {
+      const template = recurringTemplates.find(t => t.id === selectedTemplateId);
+      if (template) {
+        setInvoice(prev => ({
+          ...prev,
+          customer: template.customer,
+          lines: template.lines,
+          btw_percentage: template.btw_percentage,
+        }));
+        setRecurringInterval(template.recurring_interval);
+        setRecurringStartDate(template.recurring_start_date);
+        setRecurringEndDate(template.recurring_end_date);
+        // Update invoice date to today
+        setInvoice(prev => ({
+          ...prev,
+          invoice_date: new Date().toISOString().split('T')[0],
+          due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        }));
+      }
+    }
+  }, [selectedTemplateId, recurringTemplates]);
 
   // This useEffect is now ONLY for handling a switch from one invoice to another
   // (e.g., from 'new' to 'edit') while the component is already mounted.
@@ -115,37 +178,65 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
   useEffect(() => {
     if (initialInvoice) {
       setInvoice(initialInvoice);
+      setIsRecurring(initialInvoice.is_recurring || false);
+      if (initialInvoice.is_recurring) {
+        setRecurringInterval(initialInvoice.recurring_interval || 'monthly');
+        setRecurringStartDate(initialInvoice.recurring_start_date || new Date().toISOString().split('T')[0]);
+        setRecurringEndDate(initialInvoice.recurring_end_date || null);
+      }
     }
   }, [initialInvoice]);
   
   useEffect(() => {
     const calculateTotal = (invoiceToCalc: Invoice): number => {
         const subtotal = invoiceToCalc.lines.reduce((acc, line) => {
-            return acc + ((line.quantity || 0) * (line.unit_price || 0) * (1 - ((line.discount_percentage || 0) / 100)));
+            const lineSubtotal = (line.quantity || 0) * (line.unit_price || 0);
+            let discount = 0;
+            
+            // Calculate discount based on type
+            if (line.discount_type === 'euros' && line.discount_amount) {
+                discount = line.discount_amount;
+            } else if (line.discount_type === 'percentage' || !line.discount_type) {
+                // Default to percentage for backwards compatibility
+                discount = lineSubtotal * ((line.discount_percentage || 0) / 100);
+            }
+            
+            return acc + (lineSubtotal - discount);
         }, 0);
-        const btwAmount = subtotal * ((invoiceToCalc.btw_percentage || 0) / 100);
-        return subtotal + btwAmount;
+        
+        if (btwIncluded) {
+            // Prijzen zijn inclusief BTW
+            // BTW bedrag = subtotaal - (subtotaal / (1 + btw_percentage/100))
+            const btwMultiplier = 1 + ((invoiceToCalc.btw_percentage || 0) / 100);
+            const subtotalExclBtw = subtotal / btwMultiplier;
+            const btwAmount = subtotal - subtotalExclBtw;
+            // Totaal is het subtotaal (want inclusief BTW)
+            return subtotal;
+        } else {
+            // Prijzen zijn exclusief BTW
+            const btwAmount = subtotal * ((invoiceToCalc.btw_percentage || 0) / 100);
+            return subtotal + btwAmount;
+        }
     };
     
     const currentTotal = calculateTotal(invoice);
     setTotalAmount(currentTotal);
     setIsOverLimit(currentTotal > MAX_INVOICE_TOTAL);
-  }, [invoice]);
+  }, [invoice, btwIncluded]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setInvoice(prev => ({ ...prev, [name]: name === 'btw_percentage' ? parseFloat(value) : value }));
-  };
-
-  const handleCustomerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setInvoice(prev => ({
-        ...prev,
-        customer: {
-            ...prev.customer,
-            [name]: value,
-        }
-    }));
+    
+    // Update recurring dates when invoice dates change
+    if (isRecurring) {
+      if (name === 'invoice_date') {
+        setRecurringStartDate(value);
+      } else if (name === 'due_date') {
+        // For recurring invoices, we can use due_date as end date if needed
+        // But typically we'd use invoice_date as start date
+      }
+    }
   };
   
   const handleLineChange = (lineId: string, field: keyof Omit<InvoiceLine, 'id'>, value: string) => {
@@ -154,7 +245,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
       lines: prev.lines.map(line => {
         if (line.id !== lineId) return line;
 
-        const isNumericField = field === 'quantity' || field === 'unit_price' || field === 'discount_percentage';
+        const isNumericField = field === 'quantity' || field === 'unit_price' || field === 'discount_percentage' || field === 'discount_amount';
         
         if (isNumericField) {
             // Remove any non-numeric characters except decimal point
@@ -174,10 +265,21 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
                 }
             }
             
-            return { ...line, [field]: parseFloat(numericValue) || 0 };
-        } else { // This block handles 'description'
-            return { ...line, [field]: value.slice(0, 30) };
+            return { ...line, [field]: numericValue === '' ? 0 : (parseFloat(numericValue) || 0) };
         }
+        
+        // Handle discount_type change - reset discount values when switching type
+        if (field === 'discount_type') {
+            return {
+                ...line,
+                discount_type: value as 'percentage' | 'euros',
+                discount_percentage: value === 'percentage' ? (line.discount_percentage || 0) : 0,
+                discount_amount: value === 'euros' ? (line.discount_amount || 0) : 0
+            };
+        }
+        
+        // This block handles 'description'
+        return { ...line, [field]: value.slice(0, 30) };
       }),
     }));
   };
@@ -187,7 +289,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
     if (customerId === "") {
         setInvoice(prev => ({
             ...prev,
-            customer: { name: '', address: '', city: '', email: '' }
+            customer: { name: '', address: '', city: '', email: '', kvk_number: '', btw_number: '' }
         }));
     } else {
         const selected = customers.find(c => c.id === customerId);
@@ -198,17 +300,34 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
                     name: selected.name,
                     address: selected.address,
                     city: selected.city,
-                    email: selected.email
+                    email: selected.email,
+                    kvk_number: (selected as any).kvk_number || '',
+                    btw_number: (selected as any).btw_number || ''
                 }
             }));
+            // Set customer type based on whether kvk/btw exists
+            if ((selected as any).kvk_number || (selected as any).btw_number) {
+                setCustomerType('bedrijf');
+            }
         }
     }
+  };
+
+  const handleCustomerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setInvoice(prev => ({
+        ...prev,
+        customer: {
+            ...prev.customer,
+            [name]: value,
+        }
+    }));
   };
   
   const addLine = () => {
     setInvoice(prev => ({
       ...prev,
-      lines: [...prev.lines, { id: uuidv4(), description: '', quantity: 1, unit_price: 0, discount_percentage: 0 }],
+      lines: [...prev.lines, { id: uuidv4(), description: '', quantity: 1, unit_price: 0, discount_percentage: 0, discount_type: 'percentage', discount_amount: 0 }],
     }));
   };
 
@@ -219,23 +338,75 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(invoice);
+    
+    let templateId = selectedTemplateId;
+    
+    // If recurring, save as template first (or update existing)
+    if (isRecurring && userProfile.id) {
+      try {
+        const templateName = invoice.customer.name 
+          ? `${invoice.customer.name} - ${recurringInterval === 'weekly' ? 'Wekelijks' : recurringInterval === 'monthly' ? 'Maandelijks' : recurringInterval === 'quarterly' ? 'Kwartaal' : 'Jaarlijks'}`
+          : `Terugkerende factuur - ${recurringInterval}`;
+        
+        const templateData: any = {
+          user_id: userProfile.id,
+          name: templateName,
+          customer: invoice.customer,
+          lines: invoice.lines,
+          btw_percentage: invoice.btw_percentage,
+          recurring_interval: recurringInterval,
+          recurring_start_date: recurringStartDate,
+          recurring_end_date: recurringEndDate,
+        };
+        
+        // If we have a selected template, update it, otherwise create new
+        if (selectedTemplateId) {
+          templateData.id = selectedTemplateId;
+        }
+        
+        const { data: template, error: templateError } = await supabase
+          .from('recurring_invoice_templates')
+          .upsert(templateData, { onConflict: 'id' })
+          .select()
+          .single();
+        
+        if (templateError) {
+          console.error('Error saving template:', templateError);
+        } else if (template) {
+          templateId = template.id;
+        }
+      } catch (error) {
+        console.error('Error saving recurring template:', error);
+      }
+    }
+    
+    // Save invoice with recurring data
+    const invoiceToSave: Invoice = {
+      ...invoice,
+      is_recurring: isRecurring,
+      recurring_template_id: isRecurring ? templateId : undefined,
+      recurring_interval: isRecurring ? recurringInterval : undefined,
+      recurring_start_date: isRecurring ? recurringStartDate : undefined,
+      recurring_end_date: isRecurring ? recurringEndDate : undefined,
+    };
+    
+    onSave(invoiceToSave);
   };
   
-  const inputStyle = "block w-full rounded-md border-stone-300 bg-white px-4 py-3 text-base placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-colors hover:border-stone-400";
+  const inputStyle = "block w-full rounded-md border border-stone-300 bg-white px-4 py-3 text-base placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-colors hover:border-stone-400";
 
   return (
     <form onSubmit={handleSubmit} className="h-full flex flex-col p-4 sm:p-6 md:p-8 pb-20 sm:pb-8">
       {/* Header */}
-      <header className="flex-shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 mb-4 gap-4 border-b border-stone-200">
-        <div className="flex items-center w-full sm:w-auto">
+      <header className="flex-shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 mb-3 gap-3 border-b border-stone-200">
+        <div className="flex items-center gap-4 w-full sm:w-auto flex-wrap">
             <button type="button" onClick={onCancel} className="flex items-center text-sm font-semibold text-zinc-600 hover:text-zinc-900 transition-colors group">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-2 transition-transform group-hover:-translate-x-1"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
                 Terug
             </button>
-            <span className="ml-4 inline-block px-3 py-1.5 text-sm font-semibold text-zinc-600 bg-stone-200 rounded-md">
+            <span className="inline-block px-3 py-1.5 text-sm font-semibold text-zinc-600 bg-stone-200 rounded-md">
                 {initialInvoice ? 'Factuur bewerken' : 'Nieuwe factuur'}
             </span>
         </div>
@@ -266,30 +437,160 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
           </button>
         </div>
       </header>
+
+      {/* Recurring Invoice Options */}
+      <div className="flex-shrink-0 mb-3">
+        {isRecurring && (
+          <div className="space-y-3">
+            {/* Select Existing Template */}
+            {recurringTemplates.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-2">
+                  Selecteer bestaande terugkerende factuur
+                </label>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  className={inputStyle}
+                >
+                  <option value="">-- Nieuwe terugkerende factuur --</option>
+                  {recurringTemplates.map(template => (
+                    <option key={template.id} value={template.id}>
+                      {template.name} ({template.recurring_interval})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       
       {/* Main Content */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 overflow-hidden">
         {/* Left Column: Preview - Hidden on mobile, shown on larger screens */}
         <div className="hidden lg:flex lg:col-span-1 bg-stone-100 p-4 rounded-lg flex-col overflow-hidden">
             <h3 className="text-lg font-semibold text-zinc-800 mb-4 flex-shrink-0">Preview</h3>
-            <div className="flex-1 flex items-center justify-center overflow-hidden">
-                <div className="bg-white shadow-lg rounded-md overflow-hidden h-full aspect-[210/297]">
-                    <InvoicePreview 
-                        invoice={invoice}
-                        userProfile={userProfile}
-                        templateStyle={userProfile.template_style}
-                        templateCustomizations={userProfile.template_customizations}
-                        previewSize="large"
-                    />
+            <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0">
+                <div className="preview-container bg-white shadow-lg rounded-md overflow-hidden" style={{ 
+                    width: 'min(520px, 100%)',
+                    maxHeight: '100%',
+                    aspectRatio: '210/297'
+                }}>
+                    <div className="w-full h-full preview-content">
+                        <div className="w-full h-full" style={{ minHeight: '100%' }}>
+                            <InvoicePreview 
+                                invoice={invoice}
+                                userProfile={userProfile}
+                                templateStyle={userProfile.template_style}
+                                templateCustomizations={userProfile.template_customizations}
+                                previewSize="large"
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
         {/* Right Column: Form Inputs */}
-        <div className="lg:col-span-1 overflow-y-auto space-y-4 sm:space-y-6">
-            <h2 className="text-xl font-bold text-zinc-800 mb-4">Factuurgegevens</h2>
-            <div className="bg-stone-50 p-4 sm:p-5 rounded-lg border border-stone-200 space-y-4">
+        <div className="lg:col-span-1 overflow-y-auto space-y-3 sm:space-y-4">
+            <h2 className="text-xl font-bold text-zinc-800 mb-3">Factuurgegevens</h2>
+            
+            {/* Recurring Invoice Toggle - In Factuurgegevens section */}
+            <div className="mb-3">
+                <div className="inline-flex rounded-lg border border-stone-300 bg-white p-1 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setIsRecurring(false)}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center ${
+                      !isRecurring
+                        ? 'bg-stone-800 text-white'
+                        : 'bg-white text-zinc-700 hover:text-zinc-900'
+                    }`}
+                  >
+                    <span className={`inline-block w-4 h-4 rounded-full border-2 mr-2 flex items-center justify-center ${
+                      !isRecurring
+                        ? 'border-white'
+                        : 'border-stone-300'
+                    }`}>
+                      {!isRecurring && (
+                        <span className="w-2 h-2 rounded-full bg-white"></span>
+                      )}
+                    </span>
+                    Eenmalig
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsRecurring(true)}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center ${
+                      isRecurring
+                        ? 'bg-stone-800 text-white'
+                        : 'bg-white text-zinc-700 hover:text-zinc-900'
+                    }`}
+                  >
+                    <span className={`inline-block w-4 h-4 rounded-full border-2 mr-2 flex items-center justify-center ${
+                      isRecurring
+                        ? 'border-white'
+                        : 'border-stone-300'
+                    }`}>
+                      {isRecurring && (
+                        <span className="w-2 h-2 rounded-full bg-white"></span>
+                      )}
+                    </span>
+                    Terugkerend
+                  </button>
+                </div>
+            </div>
+            
+            <div className="bg-stone-50 p-4 sm:p-5 rounded-lg space-y-4">
                 <h3 className="font-semibold text-zinc-700 text-lg">Klant</h3>
+                
+                {/* Customer Type Toggle */}
+                <div>
+                    <div className="inline-flex rounded-lg border border-stone-300 bg-white p-1 shadow-sm">
+                        <button
+                            type="button"
+                            onClick={() => setCustomerType('bedrijf')}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center ${
+                                customerType === 'bedrijf'
+                                    ? 'bg-stone-800 text-white'
+                                    : 'bg-white text-zinc-700 hover:text-zinc-900'
+                            }`}
+                        >
+                            <span className={`inline-block w-4 h-4 rounded-full border-2 mr-2 flex items-center justify-center ${
+                                customerType === 'bedrijf'
+                                    ? 'border-white'
+                                    : 'border-stone-300'
+                            }`}>
+                                {customerType === 'bedrijf' && (
+                                    <span className="w-2 h-2 rounded-full bg-white"></span>
+                                )}
+                            </span>
+                            Bedrijf
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setCustomerType('persoon')}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center ${
+                                customerType === 'persoon'
+                                    ? 'bg-stone-800 text-white'
+                                    : 'bg-white text-zinc-700 hover:text-zinc-900'
+                            }`}
+                        >
+                            <span className={`inline-block w-4 h-4 rounded-full border-2 mr-2 flex items-center justify-center ${
+                                customerType === 'persoon'
+                                    ? 'border-white'
+                                    : 'border-stone-300'
+                            }`}>
+                                {customerType === 'persoon' && (
+                                    <span className="w-2 h-2 rounded-full bg-white"></span>
+                                )}
+                            </span>
+                            Persoon
+                        </button>
+                    </div>
+                </div>
+
                  <div>
                     <label htmlFor="customer-select" className="block text-sm font-medium text-zinc-700 mb-2">Selecteer Bestaande Klant</label>
                     <select id="customer-select" onChange={handleCustomerSelect} className={`${inputStyle} mt-0`}>
@@ -300,9 +601,44 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
                     </select>
                 </div>
                  <div>
-                    <label htmlFor="customerName" className="block text-sm font-medium text-zinc-700 mb-2">Naam</label>
+                    <label htmlFor="customerName" className="block text-sm font-medium text-zinc-700 mb-2">
+                        {customerType === 'bedrijf' ? 'Bedrijfsnaam' : 'Naam'}
+                    </label>
                     <input type="text" id="customerName" name="name" value={invoice.customer.name} onChange={handleCustomerChange} className={`${inputStyle} mt-0`} required />
                 </div>
+
+                {/* KvK and BTW fields - only for Bedrijf */}
+                {customerType === 'bedrijf' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label htmlFor="customerKvk" className="block text-sm font-medium text-zinc-700 mb-2">
+                                KvK-nummer <span className="text-zinc-500 font-normal">(optioneel)</span>
+                            </label>
+                            <input 
+                                type="text" 
+                                id="customerKvk" 
+                                name="kvk_number" 
+                                value={invoice.customer.kvk_number || ''} 
+                                onChange={handleCustomerChange} 
+                                className={`${inputStyle} mt-0`} 
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="customerBtw" className="block text-sm font-medium text-zinc-700 mb-2">
+                                Btw-nummer <span className="text-zinc-500 font-normal">(optioneel)</span>
+                            </label>
+                            <input 
+                                type="text" 
+                                id="customerBtw" 
+                                name="btw_number" 
+                                value={invoice.customer.btw_number || ''} 
+                                onChange={handleCustomerChange} 
+                                className={`${inputStyle} mt-0`} 
+                            />
+                        </div>
+                    </div>
+                )}
+
                 <div>
                     <label htmlFor="customerEmail" className="block text-sm font-medium text-zinc-700 mb-2">E-mail</label>
                     <input type="email" id="customerEmail" name="email" value={invoice.customer.email} onChange={handleCustomerChange} className={`${inputStyle} mt-0`} />
@@ -317,7 +653,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
                 </div>
             </div>
 
-            <div className="bg-stone-50 p-4 sm:p-5 rounded-lg border border-stone-200 space-y-4">
+            <div className="bg-stone-50 p-4 sm:p-5 rounded-lg space-y-4">
                 <h3 className="font-semibold text-zinc-700 text-lg">Details</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
@@ -329,7 +665,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
                                 name="invoice_number"
                                 value={invoice.invoice_number}
                                 onChange={handleChange}
-                                className="block w-full rounded-none rounded-l-md border-stone-300 bg-white px-4 py-3 text-base placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-colors hover:border-stone-400"
+                                className="block w-full rounded-none rounded-l-md border border-stone-300 bg-white px-4 py-3 text-base placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-colors hover:border-stone-400"
                                 required
                             />
                             <button
@@ -360,46 +696,129 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
                         <label htmlFor="due_date" className="block text-sm font-medium text-zinc-700 mb-2">Vervaldatum</label>
                         <input type="date" id="due_date" name="due_date" value={invoice.due_date} onChange={handleChange} className={`${inputStyle} mt-0`} required />
                     </div>
-                     <div className="sm:col-span-2">
+                     {isRecurring && (
+                        <div className="sm:col-span-2">
+                            <label className="block text-sm font-medium text-zinc-700 mb-2">
+                                Interval
+                            </label>
+                            <div className="flex rounded-lg border border-stone-300 bg-white overflow-hidden">
+                                <div className="px-3 py-2 text-sm text-zinc-600 border-r border-stone-300 bg-stone-50">
+                                    Interval
+                                </div>
+                                <select
+                                    value={recurringInterval}
+                                    onChange={(e) => setRecurringInterval(e.target.value as 'weekly' | 'monthly' | 'quarterly' | 'yearly')}
+                                    className="flex-1 px-3 py-2 text-sm border-0 focus:ring-0 focus:outline-none"
+                                >
+                                    <option value="weekly">Wekelijks</option>
+                                    <option value="monthly">Maandelijks</option>
+                                    <option value="quarterly">Kwartaal</option>
+                                    <option value="yearly">Jaarlijks</option>
+                                </select>
+                            </div>
+                        </div>
+                    )}
+                    <div className="sm:col-span-2">
                         <label htmlFor="btw_percentage" className="block text-sm font-medium text-zinc-700 mb-2">BTW Percentage</label>
                         <input type="number" id="btw_percentage" name="btw_percentage" value={invoice.btw_percentage} onChange={handleChange} className={`${inputStyle} mt-0`} required />
+                    </div>
+                    <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-zinc-700 mb-2">BTW Weergave</label>
+                        <div className="flex rounded-lg border border-stone-300 bg-white shadow-sm overflow-hidden">
+                            <button
+                                type="button"
+                                onClick={() => setBtwIncluded(true)}
+                                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                                    btwIncluded
+                                        ? 'bg-stone-200 text-zinc-900'
+                                        : 'bg-white text-zinc-600 hover:bg-stone-50'
+                                }`}
+                            >
+                                Inclusief BTW
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setBtwIncluded(false)}
+                                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-l border-stone-300 ${
+                                    !btwIncluded
+                                        ? 'bg-stone-200 text-zinc-900'
+                                        : 'bg-white text-zinc-600 hover:bg-stone-50'
+                                }`}
+                            >
+                                Exclusief BTW
+                            </button>
+                        </div>
+                        <p className="mt-2 text-xs text-zinc-500">
+                            {btwIncluded 
+                                ? 'De ingevoerde prijzen zijn inclusief BTW. De BTW wordt automatisch berekend en afgetrokken van het totaal.'
+                                : 'De ingevoerde prijzen zijn exclusief BTW. De BTW wordt automatisch berekend en opgeteld bij het totaal.'}
+                        </p>
                     </div>
                 </div>
             </div>
 
-            <div className="bg-stone-50 p-4 sm:p-5 rounded-lg border border-stone-200">
-                <h3 className="font-semibold text-zinc-700 mb-4 text-lg">Factuurregels</h3>
+            <div className="bg-stone-50 p-4 sm:p-5 rounded-lg space-y-4">
+                <h3 className="font-semibold text-zinc-700 text-lg">Factuurregels</h3>
                 <div className="space-y-4">
                     {invoice.lines.map((line, index) => {
-                       const lineTotal = (line.quantity * line.unit_price) * (1 - ((line.discount_percentage || 0) / 100));
+                       const lineSubtotal = (line.quantity || 0) * (line.unit_price || 0);
+                       let discount = 0;
+                       
+                       // Calculate discount based on type
+                       if (line.discount_type === 'euros' && line.discount_amount) {
+                           discount = line.discount_amount;
+                       } else if (line.discount_type === 'percentage' || !line.discount_type) {
+                           // Default to percentage for backwards compatibility
+                           discount = lineSubtotal * ((line.discount_percentage || 0) / 100);
+                       }
+                       
+                       const lineTotal = lineSubtotal - discount;
                        return (
-                        <div key={line.id} className="bg-white p-4 rounded-lg border border-stone-200 space-y-3">
+                        <div key={line.id} className="bg-white p-4 rounded-lg space-y-3">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div className="sm:col-span-2">
                                     <label className="block text-xs font-medium text-zinc-700 mb-2">Omschrijving</label>
-                                    <input type="text" placeholder="Dienst of product" value={line.description} onChange={(e) => handleLineChange(line.id, 'description', e.target.value)} className={inputStyle} required maxLength={30} />
+                                    <input type="text" placeholder="Dienst of product" value={line.description} onChange={(e) => handleLineChange(line.id, 'description', e.target.value)} className="block w-full rounded-md border border-stone-300 bg-white px-4 py-3 text-base placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-colors hover:border-stone-400" required maxLength={30} />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium text-zinc-700 mb-2">Aantal</label>
-                                    <input type="number" step="any" value={line.quantity} onChange={(e) => handleLineChange(line.id, 'quantity', e.target.value)} className={inputStyle} required />
+                                    <input type="number" step="any" value={line.quantity} onChange={(e) => handleLineChange(line.id, 'quantity', e.target.value)} className="block w-full rounded-md border border-stone-300 bg-white px-4 py-3 text-base placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-colors hover:border-stone-400" required />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium text-zinc-700 mb-2">Prijs (€)</label>
-                                    <input type="number" step="any" value={line.unit_price} onChange={(e) => handleLineChange(line.id, 'unit_price', e.target.value)} className={inputStyle} required />
+                                    <input type="number" step="any" value={line.unit_price} onChange={(e) => handleLineChange(line.id, 'unit_price', e.target.value)} className="block w-full rounded-md border border-stone-300 bg-white px-4 py-3 text-base placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-colors hover:border-stone-400" required />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-zinc-700 mb-2">Korting (%)</label>
-                                    <input
-                                        type="number"
-                                        step="any"
-                                        placeholder="0"
-                                        value={line.discount_percentage || ''}
-                                        onChange={(e) => handleLineChange(line.id, 'discount_percentage', e.target.value)}
-                                        onKeyDown={preventDiscountSignInput}
-                                        className={inputStyle}
-                                    />
+                                    <label className="block text-xs font-medium text-zinc-700 mb-2">Korting</label>
+                                    <div className="flex rounded-md shadow-sm">
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            placeholder="0"
+                                            value={
+                                                (line.discount_type === 'euros' ? (line.discount_amount || '') : (line.discount_percentage || ''))
+                                            }
+                                            onChange={(e) => {
+                                                if (line.discount_type === 'euros') {
+                                                    handleLineChange(line.id, 'discount_amount', e.target.value);
+                                                } else {
+                                                    handleLineChange(line.id, 'discount_percentage', e.target.value);
+                                                }
+                                            }}
+                                            onKeyDown={preventDiscountSignInput}
+                                            className="block w-full rounded-l-md border border-stone-300 bg-white px-3 py-2 text-base placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-colors hover:border-stone-400"
+                                        />
+                                        <select
+                                            value={line.discount_type || 'percentage'}
+                                            onChange={(e) => handleLineChange(line.id, 'discount_type', e.target.value)}
+                                            className="relative -ml-px inline-flex items-center rounded-r-md border border-stone-300 bg-stone-50 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-stone-100 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                        >
+                                            <option value="percentage">%</option>
+                                            <option value="euros">€</option>
+                                        </select>
+                                    </div>
                                 </div>
-                                <div className="sm:col-span-2 flex items-center justify-between pt-2 border-t border-stone-200">
+                                <div className="sm:col-span-2 flex items-center justify-between pt-2">
                                     <div>
                                         <span className="text-xs font-medium text-zinc-500">Regel totaal:</span>
                                         <p className={`text-lg text-zinc-800 font-semibold ${getCurrencyFontSizeClass(lineTotal)}`}>

@@ -404,7 +404,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, userProfile,
         
         {/* Advanced Filters */}
         <div className="mb-6">
-          <div className="border-b border-stone-200 overflow-x-auto">
+          <div className="border-b border-stone-200">
               <nav className="-mb-px flex space-x-6" aria-label="Tabs">
                   {statusFilters.map((tab) => (
                       <button

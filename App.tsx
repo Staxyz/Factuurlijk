@@ -24,6 +24,7 @@ import { TermsAndConditionsPage } from './components/TermsAndConditionsPage';
 import { ContactPage } from './components/ContactPage';
 import { ResetPasswordPage } from './components/ResetPasswordPage';
 import { CheckoutSuccessPage } from './components/CheckoutSuccessPage';
+import { OnboardingTour } from './components/OnboardingTour';
 
 // Secure error message extractor - prevents leaking sensitive information
 const getErrorMessage = (error: unknown, defaultMessage = 'Er is een onbekende fout opgetreden.'): string => {
@@ -89,6 +90,7 @@ const App: React.FC = () => {
     return window.location.hash.includes('checkout-success');
   });
   const isCheckoutRouteRef = useRef(isCheckoutRoute);
+  const userNavigatedRef = useRef(false); // Track if user manually navigated
   useEffect(() => {
     isCheckoutRouteRef.current = isCheckoutRoute;
   }, [isCheckoutRoute]);
@@ -103,23 +105,36 @@ const App: React.FC = () => {
       const isCheckoutHash = normalized.includes('checkout-success');
       setIsCheckoutRoute(isCheckoutHash);
 
+      // Only override view if there's a relevant hash in the URL
+      // Don't interfere with normal navigation
       if (isCheckoutHash) {
         console.log('🔗 Hash route detected: checkout-success', hash);
         setView('checkout-success');
         return;
       }
 
-      if (normalized.includes('upgrade')) {
+      if (normalized.includes('upgrade') && normalized.includes('#/')) {
         console.log('🔗 Hash route detected: upgrade');
         setView('upgrade');
         return;
       }
+      
+      // If hash is empty or doesn't match known routes, don't change view
+      // This allows normal navigation to work
     };
 
-    handleHashRoute();
+    // Only run on mount if there's a relevant hash
+    const hash = window.location.hash || '';
+    if (hash.includes('checkout-success') || (hash.includes('upgrade') && hash.includes('#/'))) {
+      handleHashRoute();
+    }
+    
     window.addEventListener('hashchange', handleHashRoute);
     return () => window.removeEventListener('hashchange', handleHashRoute);
   }, []);
+  
+  // Prevent hash routing from interfering with normal navigation
+  // Removed this useEffect as it was causing issues - hash cleanup is now handled in handleSetCurrentView
   
   // Data state
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -406,7 +421,7 @@ const App: React.FC = () => {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔄 Auth state changed:', event, session?.user?.email);
+      console.log('🔄 Auth state changed:', event, session?.user?.email, 'Current view:', view, 'User navigated:', userNavigatedRef.current);
       setSession(session);
 
       if (session) {
@@ -415,23 +430,29 @@ const App: React.FC = () => {
         if (isCheckoutRouteRef.current) {
           console.log('⏸ Checkout success route active - skipping automatic dashboard redirect');
         } else {
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            console.log('✅ User signed in, redirecting to dashboard');
+          // Only redirect to dashboard on actual sign in, and ONLY if user hasn't manually navigated
+          // This prevents overriding user navigation to other pages
+          if (event === 'SIGNED_IN' && !userNavigatedRef.current) {
+            console.log('✅ User signed in, redirecting to dashboard (current view:', view, ')');
             setView('dashboard');
             if (window.location.hash.includes('access_token') || window.location.search.includes('access_token')) {
               window.history.replaceState({}, document.title, window.location.pathname || '/');
               console.log('🧹 Cleaned OAuth params from URL');
             }
           } else {
-            setView('dashboard');
+            console.log('🟡 Auth event', event, '- NOT changing view, keeping:', view, '(user navigated:', userNavigatedRef.current, ')');
           }
+          // Don't change view on TOKEN_REFRESHED or other events - let user stay on current page
         }
       } else {
         setWaitingForOAuth(false);
+        userNavigatedRef.current = false; // Reset on logout
 
         if (isCheckoutRouteRef.current) {
           console.log('⚠️ Checkout success route active without session - keeping current view');
-        } else {
+        } else if (event === 'SIGNED_OUT') {
+          // Only redirect to landing on explicit sign out
+          console.log('🔴 User signed out, redirecting to landing');
           setView('landing');
         }
 
@@ -457,6 +478,106 @@ const App: React.FC = () => {
     }
   }, [session, fetchData]);
 
+  // Auto-detect payment return and upgrade user
+  useEffect(() => {
+    if (!session?.user) return;
+
+    const checkForRecentPayment = async () => {
+      const paymentTimestamp = sessionStorage.getItem('factuurlijk:paymentTimestamp');
+      const paymentSource = sessionStorage.getItem('factuurlijk:paymentSource');
+      const storedUserId = sessionStorage.getItem('factuurlijk:paymentUserId');
+      
+      // Check if payment was initiated recently (within last 10 minutes) and user matches
+      if (paymentTimestamp && paymentSource && storedUserId === session.user.id) {
+        const timeSincePayment = Date.now() - parseInt(paymentTimestamp);
+        const isRecent = timeSincePayment < 10 * 60 * 1000; // 10 minutes
+        
+        if (isRecent) {
+          console.log('🔍 Recent payment detected, checking if upgrade is needed...');
+          
+          // Check current plan
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('plan')
+            .eq('id', session.user.id)
+            .single();
+          
+          // If user is not Pro yet, upgrade them
+          if (profile && profile.plan !== 'pro') {
+            console.log('📝 Upgrading user to Pro after payment...');
+            
+            const storedUserEmail = sessionStorage.getItem('factuurlijk:paymentUserEmail');
+            
+            // Log payment
+            try {
+              await supabase.from('mollie_payments').insert({
+                payment_id: `payment_link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                payment_status: 'paid',
+                amount_value: 39.50,
+                amount_currency: 'EUR',
+                description: 'Factuurlijk Pro upgrade via Payment Link',
+                customer_email: storedUserEmail || session.user.email,
+                supabase_user_id: session.user.id,
+                metadata: {
+                  source: paymentSource,
+                  payment_method: 'payment_link',
+                  auto_detected: true
+                },
+                paid_at: new Date().toISOString()
+              });
+            } catch (err) {
+              console.warn('⚠️ Could not log payment:', err);
+            }
+            
+            // Upgrade to Pro
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({ 
+                plan: 'pro', 
+                updated_at: new Date().toISOString() 
+              })
+              .eq('id', session.user.id);
+            
+            if (!updateError) {
+              console.log('✅ User auto-upgraded to Pro!');
+              // Refresh user data
+              await fetchData(session.user);
+              // Clean up sessionStorage
+              sessionStorage.removeItem('factuurlijk:paymentSource');
+              sessionStorage.removeItem('factuurlijk:paymentUserId');
+              sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+              sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+              
+              // Redirect to checkout-success to show success message
+              if (view !== 'checkout-success') {
+                setView('checkout-success');
+              }
+            }
+          } else if (profile?.plan === 'pro') {
+            // Already Pro, clean up
+            sessionStorage.removeItem('factuurlijk:paymentSource');
+            sessionStorage.removeItem('factuurlijk:paymentUserId');
+            sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+            sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+          }
+        } else {
+          // Payment too old, clean up
+          sessionStorage.removeItem('factuurlijk:paymentSource');
+          sessionStorage.removeItem('factuurlijk:paymentUserId');
+          sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+          sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+        }
+      }
+    };
+
+    // Check after a short delay to ensure session is ready
+    const timer = setTimeout(() => {
+      checkForRecentPayment();
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [session, view, fetchData]);
+
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -468,8 +589,15 @@ const App: React.FC = () => {
   };
   
   const handleSetCurrentView = (targetView: View) => {
+    console.log('🔵 handleSetCurrentView called with:', targetView);
+    userNavigatedRef.current = true; // Mark that user manually navigated
     if (targetView === 'new-invoice') setInvoiceToEdit(null);
     if (targetView === 'new-customer') setCustomerToEdit(null);
+    // Clear any hash that might interfere BEFORE setting the view
+    if (window.location.hash && !window.location.hash.includes('checkout-success') && !window.location.hash.includes('upgrade')) {
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    }
+    console.log('🔵 Setting view to:', targetView);
     setView(targetView);
     setIsSidebarOpen(false); // Close sidebar on navigation
   };
@@ -545,6 +673,21 @@ const App: React.FC = () => {
 
         // The increment is now handled by a database trigger.
         // No RPC call is needed from the client anymore. This is the correct state.
+        
+        // Mark invoice onboarding as completed when a new invoice is created
+        if (!isUpdate && session?.user) {
+          try {
+            await supabase
+              .from('profiles')
+              .update({
+                onboarding_invoice_completed: true,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.user.id);
+          } catch (error) {
+            console.error('Error updating invoice onboarding status:', error);
+          }
+        }
         
         setView('invoices');
         await fetchData(session.user);
@@ -667,7 +810,7 @@ const App: React.FC = () => {
     
     switch (view) {
       case 'dashboard':
-        return contentWrapper(<Dashboard invoices={invoices} setCurrentView={handleSetCurrentView} onViewInvoice={handleViewInvoice} session={session} isFreePlanLimitReached={isFreePlanLimitReached} />);
+        return contentWrapper(<Dashboard invoices={invoices} setCurrentView={handleSetCurrentView} onViewInvoice={handleViewInvoice} session={session} isFreePlanLimitReached={isFreePlanLimitReached} onRefresh={() => session?.user && fetchData(session.user)} />);
       case 'invoices':
         return contentWrapper(<InvoiceList 
                     invoices={invoices} 
@@ -716,7 +859,11 @@ const App: React.FC = () => {
       case 'settings':
         return contentWrapper(<SettingsPage userProfile={userProfile} session={session} setCurrentView={handleSetCurrentView} />);
       case 'templates':
-        return <Templates userProfile={userProfile} setUserProfile={setUserProfile} session={session} />;
+        return (
+          <div className="h-full w-full overflow-hidden">
+            <Templates userProfile={userProfile} setUserProfile={setUserProfile} session={session} />
+          </div>
+        );
       case 'upgrade':
         return contentWrapper(<UpgradePage setCurrentView={handleSetCurrentView} session={session} userProfile={userProfile} onUpgrade={handleUpgradeToPro} />);
       case 'help':
@@ -733,7 +880,7 @@ const App: React.FC = () => {
           />
         );
       default:
-        return contentWrapper(<Dashboard invoices={invoices} setCurrentView={handleSetCurrentView} onViewInvoice={handleViewInvoice} session={session} isFreePlanLimitReached={isFreePlanLimitReached} />);
+        return contentWrapper(<Dashboard invoices={invoices} setCurrentView={handleSetCurrentView} onViewInvoice={handleViewInvoice} session={session} isFreePlanLimitReached={isFreePlanLimitReached} onRefresh={() => session?.user && fetchData(session.user)} />);
     }
   };
 
@@ -815,8 +962,12 @@ const App: React.FC = () => {
             className={`flex-1 ${
               isNonScrollingView
                 ? 'overflow-y-hidden'
-                : 'overflow-y-auto'
+                : 'overflow-y-scroll scrollbar-hide'
             }`}
+            style={{
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+            }}
           >
             {renderContent()}
           </main>
@@ -829,6 +980,19 @@ const App: React.FC = () => {
             onEdit={handleEditInvoice}
             onDelete={handleDeleteInvoice}
             onMarkAsPaid={handleMarkAsPaid}
+        />
+      )}
+      {session && (
+        <OnboardingTour
+          userProfile={userProfile}
+          session={session}
+          invoicesCount={invoices.length}
+          onComplete={async () => {
+            // Refresh user profile when onboarding is completed
+            if (session?.user) {
+              await fetchData(session.user);
+            }
+          }}
         />
       )}
     </div>

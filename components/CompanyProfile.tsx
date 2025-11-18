@@ -188,6 +188,29 @@ export const CompanyProfile: React.FC<CompanyProfileProps> = ({ userProfile, set
       }
 
       console.log('Profile saved successfully:', data);
+      
+      // Mark profile onboarding as completed if all required fields are filled
+      const profileComplete = !!(
+        data.address && data.address.trim() !== '' &&
+        data.kvk_number && data.kvk_number.trim() !== '' &&
+        data.btw_number && data.btw_number.trim() !== '' &&
+        data.iban && data.iban.trim() !== ''
+      );
+      
+      if (profileComplete) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({
+              onboarding_profile_completed: true,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', session.user.id);
+        } catch (error) {
+          console.error('Error updating profile onboarding status:', error);
+        }
+      }
+      
       setUserProfile(data); // Update global state with data from DB
       setProfile(data); // Sync local form state to prevent false "hasChanges"
       setShowSuccess(true);

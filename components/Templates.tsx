@@ -4,7 +4,6 @@ import { InvoicePreview } from './InvoicePreview';
 import { mockInvoices } from '../constants';
 import { supabase } from '../supabaseClient';
 import type { Session } from '@supabase/supabase-js';
-import { QRCodeSVG } from 'react-qr-code';
 
 
 interface TemplatesProps {
@@ -79,7 +78,7 @@ const TemplateSelectionButton: React.FC<{
         <button
             type="button"
             onClick={onClick}
-            className={`group rounded-xl overflow-hidden text-left transition-all duration-200 relative border-2 flex flex-col ${
+            className={`group rounded-xl overflow-hidden text-left transition-all duration-200 relative border-2 flex flex-col h-full ${
                 isSelected
                     ? 'bg-teal-50/50 border-teal-500 shadow-lg'
                     : 'bg-white border-stone-200 hover:border-stone-400 hover:shadow-md'
@@ -95,14 +94,18 @@ const TemplateSelectionButton: React.FC<{
             )}
 
             {/* Preview Container */}
-            <div className="h-32 sm:h-40 bg-white shadow-inner rounded-md overflow-hidden border border-stone-200 relative m-3 sm:m-4 flex-shrink-0">
+            <div className="template-preview-container bg-white shadow-inner rounded-md overflow-hidden border border-stone-200 relative m-3 sm:m-4 flex-shrink-0" style={{ 
+                aspectRatio: '210/297',
+                minHeight: '120px',
+                height: 'clamp(120px, 25vw, 200px)'
+            }}>
                 <div
-                    className="absolute top-0 left-0 w-full"
+                    className="absolute top-0 left-0 w-full h-full"
                     style={{
                         pointerEvents: 'none',
                     }}
                 >
-                    <div className="w-full aspect-[210/297] bg-white">
+                    <div className="w-full h-full bg-white overflow-hidden template-preview-content">
                         <InvoicePreview
                             invoice={previewInvoice}
                             userProfile={dummyProfileForPreviewButtons}
@@ -111,14 +114,15 @@ const TemplateSelectionButton: React.FC<{
                                 ...defaultCustomizations[template.id],
                                 font: 'sans',
                             }}
+                            previewSize="small"
                         />
                     </div>
                 </div>
             </div>
 
             {/* Text Content with Better Spacing */}
-            <div className="flex-1 flex flex-col px-3 sm:px-4 pb-3 sm:pb-4 min-h-[80px]">
-                <h4 className="text-sm sm:text-base font-bold text-zinc-800 leading-tight mb-1.5 sm:mb-2 break-words">{template.name}</h4>
+            <div className="flex-shrink-0 flex flex-col px-3 sm:px-4 pb-3 sm:pb-4 gap-1.5 sm:gap-2 mt-auto">
+                <h4 className="text-sm sm:text-base font-bold text-zinc-800 leading-tight break-words line-clamp-1">{template.name}</h4>
                 <p className="text-xs sm:text-sm text-zinc-600 leading-relaxed line-clamp-2 break-words">{template.description}</p>
             </div>
         </button>
@@ -126,19 +130,18 @@ const TemplateSelectionButton: React.FC<{
 };
 
 export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfile, session }) => {
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateStyle>(userProfile.template_style);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateStyle>(userProfile.template_style || 'corporate');
   const [customizations, setCustomizations] = useState<TemplateCustomizations>(
-    userProfile.template_customizations || defaultCustomizations[userProfile.template_style]
+    userProfile.template_customizations || defaultCustomizations[userProfile.template_style || 'corporate']
   );
   const [footerText, setFooterText] = useState(userProfile.invoice_footer_text || '');
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [isTestingPayment, setIsTestingPayment] = useState(false);
-  const [testPaymentError, setTestPaymentError] = useState<string | null>(null);
 
   useEffect(() => {
-    setSelectedTemplate(userProfile.template_style);
-    setCustomizations(userProfile.template_customizations || defaultCustomizations[userProfile.template_style]);
+    console.log('🟢 Templates component mounted/updated');
+    setSelectedTemplate(userProfile.template_style || 'corporate');
+    setCustomizations(userProfile.template_customizations || defaultCustomizations[userProfile.template_style || 'corporate']);
     setFooterText(userProfile.invoice_footer_text || '');
   }, [userProfile]);
 
@@ -147,6 +150,20 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
   };
 
   const handleSave = async () => {
+    // Mark template onboarding as completed when user saves template
+    if (session?.user) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({
+            onboarding_template_completed: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', session.user.id);
+      } catch (error) {
+        console.error('Error updating template onboarding status:', error);
+      }
+    }
     if (!session?.user) {
         alert("U moet ingelogd zijn om op te slaan.");
         return;
@@ -203,38 +220,6 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
         .replace('{name}', userProfile.name || '[Bedrijfsnaam]'),
   }));
 
-  const handleTestPayment = async () => {
-    if (!session?.user?.email) {
-      alert('Je moet ingelogd zijn met een geldig e-mailadres om te testen.');
-      return;
-    }
-
-    setIsTestingPayment(true);
-    setTestPaymentError(null);
-
-    try {
-      // Use Mollie Payment Link directly
-      const paymentLink = import.meta.env.VITE_MOLLIE_PAYMENT_LINK || 'https://payment-links.mollie.com/payment/G9QCA98NPsAFM65BU8fsQ';
-      
-      console.log('🔄 Redirecting to Mollie Payment Link:', paymentLink);
-      
-      // Store user info in sessionStorage for after payment return
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('factuurlijk:paymentSource', 'templates-page');
-        sessionStorage.setItem('factuurlijk:paymentUserId', session.user.id);
-        sessionStorage.setItem('factuurlijk:paymentUserEmail', session.user.email);
-      }
-      
-      // Redirect to Mollie Payment Link
-      window.location.href = paymentLink;
-    } catch (error) {
-      console.error('❌ Mollie payment link redirect failed:', error);
-      const message = error instanceof Error ? error.message : 'Onbekende fout bij het starten van de betaling.';
-      setTestPaymentError(message);
-      setIsTestingPayment(false);
-    }
-  };
-
   return (
     <div className="h-full flex flex-col p-4 sm:p-6 md:p-8 pb-20 sm:pb-8">
         {/* Toast Notification */}
@@ -255,37 +240,10 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
         </div>
 
         {/* Header */}
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between flex-shrink-0 pb-4 mb-4 sm:mb-6 border-b border-stone-200">
+        <header className="flex-shrink-0 pb-4 mb-4 sm:mb-6 border-b border-stone-200">
             <div>
                 <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Pas je factuurtemplate aan</h1>
                 <p className="text-sm sm:text-base text-zinc-600 mt-1">Kies een basisstijl en pas de details aan. Deze stijl wordt gebruikt voor alle nieuwe facturen.</p>
-            </div>
-            <div className="flex flex-col items-stretch sm:items-end gap-3">
-                {/* QR Code voor betaling */}
-                <div className="bg-white p-4 rounded-lg border-2 border-teal-200 shadow-sm">
-                    <p className="text-xs font-semibold text-zinc-700 mb-2 text-center">Scan om te betalen</p>
-                    <div className="bg-white p-2 rounded border border-stone-200 inline-block">
-                        <QRCodeSVG
-                            value={import.meta.env.VITE_MOLLIE_PAYMENT_LINK || 'https://payment-links.mollie.com/payment/G9QCA98NPsAFM65BU8fsQ'}
-                            size={120}
-                            level="M"
-                            style={{ height: "auto", maxWidth: "100%", width: "100%" }}
-                            viewBox={`0 0 120 120`}
-                        />
-                    </div>
-                    <p className="text-xs text-zinc-500 mt-2 text-center max-w-[140px]">Scan met je telefoon om direct te betalen</p>
-                </div>
-                <button
-                    type="button"
-                    onClick={handleTestPayment}
-                    disabled={isTestingPayment}
-                    className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:bg-emerald-400 disabled:cursor-not-allowed transition-colors"
-                >
-                    {isTestingPayment ? 'Betaling starten...' : 'Test Mollie betaling'}
-                </button>
-                {testPaymentError && (
-                    <p className="text-xs text-red-600 max-w-sm text-right">{testPaymentError}</p>
-                )}
             </div>
         </header>
 
@@ -294,15 +252,23 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
              {/* Left Column: Live Preview - Hidden on mobile, shown on larger screens */}
             <div className="hidden lg:flex lg:col-span-1 bg-stone-100 p-4 rounded-lg flex-col overflow-hidden">
                 <h3 className="text-lg font-semibold text-zinc-800 mb-4 flex-shrink-0">Live Voorbeeld</h3>
-                <div className="flex-1 flex items-center justify-center overflow-hidden">
-                    <div className="bg-white shadow-lg rounded-md overflow-hidden h-full aspect-[210/297]">
-                        <InvoicePreview 
-                            invoice={previewInvoice}
-                            userProfile={{...userProfile, invoice_footer_text: footerText}}
-                            templateStyle={selectedTemplate}
-                            templateCustomizations={customizations}
-                            previewSize="large"
-                        />
+                <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0">
+                    <div className="preview-container bg-white shadow-lg rounded-md overflow-hidden" style={{ 
+                        width: 'min(520px, 100%)',
+                        maxHeight: '100%',
+                        aspectRatio: '210/297'
+                    }}>
+                        <div className="w-full h-full preview-content">
+                            <div className="w-full h-full" style={{ minHeight: '100%' }}>
+                                <InvoicePreview 
+                                    invoice={previewInvoice}
+                                    userProfile={{...userProfile, invoice_footer_text: footerText}}
+                                    templateStyle={selectedTemplate}
+                                    templateCustomizations={customizations}
+                                    previewSize="large"
+                                />
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

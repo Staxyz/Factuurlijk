@@ -311,7 +311,7 @@ app.post('/api/create-payment', async (req, res) => {
         checkoutUrl,
         status: payment.status
       });
-    } catch (mollieError: any) {
+    } catch (mollieError) {
       console.error('❌ Mollie API Error Details:');
       console.error('   Status:', mollieError?.status);
       console.error('   Title:', mollieError?.title);
@@ -326,6 +326,94 @@ app.post('/api/create-payment', async (req, res) => {
     console.error('❌ Error creating Mollie payment:', error);
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Internal server error'
+    });
+  }
+});
+
+/**
+ * Mollie Webhook Handler
+ * POST /api/mollie-webhook
+ * 
+ * This endpoint is called by Mollie when a payment status changes.
+ * Mollie will send payment status updates here.
+ */
+app.post('/api/mollie-webhook', async (req, res) => {
+  try {
+    console.log('📡 Mollie webhook received:', {
+      body: req.body,
+      headers: req.headers,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Mollie can send webhook in different formats
+    // Format 1: { id: "tr_xxxxx" }
+    // Format 2: Direct payment object
+    let paymentId = req.body?.id || req.body?.paymentId;
+    
+    // If no id in body, check if body itself is the payment ID string
+    if (!paymentId && typeof req.body === 'string') {
+      paymentId = req.body;
+    }
+    
+    // If still no paymentId, check query params (some webhook formats use this)
+    if (!paymentId && req.query?.id) {
+      paymentId = req.query.id;
+    }
+    
+    console.log('🔍 Extracted payment ID:', paymentId);
+    
+    if (!paymentId) {
+      console.error('❌ No payment ID found in webhook');
+      console.error('   Body:', JSON.stringify(req.body, null, 2));
+      // Still return 200 to prevent Mollie from retrying
+      return res.status(200).json({ received: true, error: 'No payment ID provided' });
+    }
+    
+    // Fetch payment from Mollie to get latest status
+    console.log('🔄 Fetching payment from Mollie API...');
+    const payment = await mollieClient.payments.get(paymentId);
+    
+    console.log('📊 Payment retrieved from Mollie:', {
+      id: payment.id,
+      status: payment.status,
+      amount: payment.amount,
+      method: payment.method,
+      metadata: payment.metadata
+    });
+    
+    // Process payment based on status
+    if (payment.status === 'paid') {
+      console.log('✅ Payment is paid, syncing to Supabase...');
+      const syncResult = await syncPaymentToSupabase(payment);
+      
+      if (syncResult.supabaseUserId) {
+        console.log('✅ Payment synced successfully! User upgraded:', syncResult.supabaseUserId);
+      } else {
+        console.warn('⚠️ Payment synced but no user ID found:', syncResult.error);
+      }
+    } else {
+      console.log(`ℹ️  Payment status is "${payment.status}", not processing (only "paid" status is processed)`);
+    }
+    
+    // Always return 200 to Mollie (they will retry if we return error)
+    res.status(200).json({ 
+      received: true, 
+      paymentId: payment.id,
+      status: payment.status,
+      processed: payment.status === 'paid'
+    });
+  } catch (error) {
+    console.error('❌ Error processing Mollie webhook:', error);
+    console.error('   Error details:', {
+      message: error.message,
+      stack: error.stack,
+      body: req.body
+    });
+    // Still return 200 to prevent Mollie from retrying excessively
+    res.status(200).json({ 
+      received: true, 
+      error: 'Webhook processed but error occurred',
+      errorMessage: error.message 
     });
   }
 });

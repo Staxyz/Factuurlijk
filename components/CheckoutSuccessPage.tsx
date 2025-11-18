@@ -18,10 +18,89 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
 
+  // Helper function to upgrade user directly
+  const upgradeUserDirectly = async (user: any, source: string) => {
+    console.log('✅ User verified, upgrading to Pro...');
+    
+    const storedUserEmail = sessionStorage.getItem('factuurlijk:paymentUserEmail');
+    
+    // Log payment to mollie_payments table
+    try {
+      const { error: logError } = await supabase
+        .from('mollie_payments')
+        .insert({
+          payment_id: `payment_link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          payment_status: 'paid',
+          amount_value: 39.50,
+          amount_currency: 'EUR',
+          description: 'Factuurlijk Pro upgrade via Payment Link',
+          customer_email: storedUserEmail || user.email,
+          supabase_user_id: user.id,
+          metadata: {
+            source: source,
+            payment_method: 'payment_link',
+            auto_upgraded: true
+          },
+          paid_at: new Date().toISOString()
+        });
+      
+      if (logError) {
+        console.warn('⚠️ Could not log payment to database:', logError);
+        // Don't throw, continue with upgrade
+      } else {
+        console.log('✅ Payment logged to database');
+      }
+    } catch (logErr) {
+      console.warn('⚠️ Error logging payment:', logErr);
+      // Don't throw, continue with upgrade
+    }
+    
+    // Upgrade user to Pro
+    const { error: updateError, data: updateData } = await supabase
+      .from('profiles')
+      .update({ 
+        plan: 'pro', 
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', user.id)
+      .select();
+    
+    if (updateError) {
+      console.error('❌ Error upgrading profile:', updateError);
+      throw updateError;
+    }
+    
+    console.log('✅ Profile upgraded to Pro:', updateData);
+    
+    // Clean up sessionStorage
+    sessionStorage.removeItem('factuurlijk:paymentSource');
+    sessionStorage.removeItem('factuurlijk:paymentUserId');
+    sessionStorage.removeItem('factuurlijk:paymentUserEmail');
+    sessionStorage.removeItem('factuurlijk:paymentTimestamp');
+    
+    setCountdown(5);
+    setIsSuccess(true);
+    setIsProcessing(false);
+    if (onUpgradeSuccess) {
+      await onUpgradeSuccess().catch(err => console.error('Error refreshing profile:', err));
+    }
+  };
+
   useEffect(() => {
     const processCheckout = async () => {
       try {
         console.log('🔍 Starting checkout processing...');
+        
+        // Get current user first
+        const { data: sessionData } = await supabase.auth.getSession();
+        const currentUser = sessionData.session?.user;
+        
+        if (!currentUser) {
+          console.error('❌ No user session found');
+          throw new Error('Je moet ingelogd zijn om je betaling te verwerken. Log in en probeer het opnieuw.');
+        }
+        
+        console.log('✅ User session found:', currentUser.id, currentUser.email);
         
         // Determine payment reference from URL/hash or storage
         const urlParams = new URLSearchParams(window.location.search);
@@ -44,82 +123,39 @@ export const CheckoutSuccessPage: React.FC<CheckoutSuccessPageProps> = ({ setCur
         const paymentSource = sessionStorage.getItem('factuurlijk:paymentSource');
         const isPaymentLinkReturn = paymentSource === 'templates-page' || paymentSource === 'upgrade-page';
         const storedUserId = sessionStorage.getItem('factuurlijk:paymentUserId');
+        const paymentTimestamp = sessionStorage.getItem('factuurlijk:paymentTimestamp');
         
-        if (!paymentId && !isPaymentLinkReturn) {
-          console.error('❌ No payment ID found in URL or storage');
-          throw new Error('Payment ID niet gevonden. Start de upgrade opnieuw zodat we je betaling kunnen verifiëren.');
+        // Check if payment was initiated recently (within last 10 minutes)
+        const isRecentPayment = paymentTimestamp && (Date.now() - parseInt(paymentTimestamp)) < 10 * 60 * 1000;
+        
+        // If no payment ID but we have stored user info and recent payment, upgrade directly
+        if (!paymentId && (isPaymentLinkReturn || isRecentPayment) && (storedUserId === currentUser.id || !storedUserId)) {
+          console.log('📝 Payment Link return detected or recent payment, upgrading user directly...');
+          await upgradeUserDirectly(currentUser, paymentSource || 'unknown');
+          return;
         }
         
-        // If Payment Link return without payment_id, upgrade directly based on stored user info
-        if (!paymentId && isPaymentLinkReturn && storedUserId) {
-          console.log('📝 Payment Link return detected, upgrading user directly...');
-          const { data: sessionData } = await supabase.auth.getSession();
-          const currentUser = sessionData.session?.user;
+        if (!paymentId && !isPaymentLinkReturn && !isRecentPayment) {
+          console.error('❌ No payment ID found in URL or storage');
+          // Check if user already has Pro plan
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('plan')
+            .eq('id', currentUser.id)
+            .single();
           
-          if (currentUser && currentUser.id === storedUserId) {
-            console.log('✅ User verified, upgrading to Pro...');
-            
-            // Log payment to mollie_payments table
-            const storedUserEmail = sessionStorage.getItem('factuurlijk:paymentUserEmail');
-            try {
-              const { error: logError } = await supabase
-                .from('mollie_payments')
-                .insert({
-                  payment_id: `payment_link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                  payment_status: 'paid',
-                  amount_value: 39.50,
-                  amount_currency: 'EUR',
-                  description: 'Factuurlijk Pro upgrade via Payment Link',
-                  customer_email: storedUserEmail || currentUser.email,
-                  supabase_user_id: currentUser.id,
-                  metadata: {
-                    source: paymentSource,
-                    payment_method: 'payment_link'
-                  },
-                  paid_at: new Date().toISOString()
-                });
-              
-              if (logError) {
-                console.warn('⚠️ Could not log payment to database:', logError);
-              } else {
-                console.log('✅ Payment logged to database');
-              }
-            } catch (logErr) {
-              console.warn('⚠️ Error logging payment:', logErr);
-            }
-            
-            // Upgrade user to Pro
-            const { error: updateError, data: updateData } = await supabase
-              .from('profiles')
-              .update({ 
-                plan: 'pro', 
-                updated_at: new Date().toISOString() 
-              })
-              .eq('id', currentUser.id)
-              .select();
-            
-            if (updateError) {
-              console.error('❌ Error upgrading profile:', updateError);
-              throw updateError;
-            }
-            
-            console.log('✅ Profile upgraded to Pro:', updateData);
-            
-            // Clean up sessionStorage
-            sessionStorage.removeItem('factuurlijk:paymentSource');
-            sessionStorage.removeItem('factuurlijk:paymentUserId');
-            sessionStorage.removeItem('factuurlijk:paymentUserEmail');
-            
-            setCountdown(5);
+          if (profile?.plan === 'pro') {
+            console.log('✅ User already has Pro plan');
+            setCountdown(3);
             setIsSuccess(true);
             setIsProcessing(false);
             if (onUpgradeSuccess) {
               await onUpgradeSuccess().catch(err => console.error('Error refreshing profile:', err));
             }
             return;
-          } else {
-            throw new Error('Gebruiker verificatie mislukt. Log opnieuw in en probeer het opnieuw.');
           }
+          
+          throw new Error('Payment ID niet gevonden. Start de upgrade opnieuw zodat we je betaling kunnen verifiëren.');
         }
 
         console.log('📝 Payment ID resolved:', paymentId);
