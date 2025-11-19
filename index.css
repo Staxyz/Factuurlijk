@@ -1,0 +1,169 @@
+/* Global font overrides */
+:root {
+  font-family: 'Manrope', sans-serif;
+}
+
+.font-serif {
+  font-family: 'Merriweather', 'Georgia', serif !important;
+}
+
+.font-mono {
+  font-family: 'IBM Plex Mono', 'Courier New', monospace !important;
+}
+
+/* Responsive preview scaling - ensures text scales down before overlapping */
+.preview-container {
+  container-type: inline-size;
+  position: relative;
+  /* Fixed width for consistent preview size across all screen sizes */
+  max-width: 520px;
+  /* Ensure scrollbar is visible */
+  overflow-y: auto !important;
+  overflow-x: hidden;
+}
+
+/* Webkit scrollbar styling for Chrome, Safari, Edge */
+.preview-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.preview-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.preview-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.preview-container::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.preview-content {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  /* Ensure content can scale down smoothly */
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-content > div {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Container query-based scaling for modern browsers */
+/* When container is narrow, scale down the content to prevent overlap */
+/* Only apply scaling when container is actually smaller than 520px */
+@container (max-width: 520px) {
+  .preview-content > div {
+    transform: scale(1);
+    transform-origin: top left;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+@container (max-width: 500px) {
+  .preview-content > div {
+    transform: scale(0.85);
+    transform-origin: top left;
+    width: 117.65%; /* Compensate for scale to maintain layout */
+    height: 117.65%;
+  }
+}
+
+@container (max-width: 400px) {
+  .preview-content > div {
+    transform: scale(0.75);
+    transform-origin: top left;
+    width: 133.33%; /* Compensate for scale to maintain layout */
+    height: 133.33%;
+  }
+}
+
+@container (max-width: 350px) {
+  .preview-content > div {
+    transform: scale(0.65);
+    transform-origin: top left;
+    width: 153.85%; /* Compensate for scale to maintain layout */
+    height: 153.85%;
+  }
+}
+
+/* Media query fallback for browsers without container query support */
+/* Removed viewport-based font scaling since we now use fixed width */
+
+/* Template preview button scaling */
+.template-preview-container {
+  container-type: inline-size;
+  position: relative;
+}
+
+.template-preview-content {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  transform-origin: top left;
+  /* Ensure content scales properly */
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Scale down template preview content when container is small */
+@container (max-width: 200px) {
+  .template-preview-content {
+    transform: scale(0.7);
+    width: 142.86%; /* 100% / 0.7 */
+    height: 142.86%;
+  }
+}
+
+@container (max-width: 150px) {
+  .template-preview-content {
+    transform: scale(0.6);
+    width: 166.67%; /* 100% / 0.6 */
+    height: 166.67%;
+  }
+}
+
+@container (max-width: 120px) {
+  .template-preview-content {
+    transform: scale(0.5);
+    width: 200%; /* 100% / 0.5 */
+    height: 200%;
+  }
+}
+
+/* Media query fallback for template previews */
+@media (max-width: 640px) {
+  .template-preview-content {
+    font-size: clamp(0.5rem, 1vw, 0.7rem);
+  }
+}
+
+/* Hide scrollbar but keep scrolling functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+
+
+
+
+
+
+

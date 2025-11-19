@@ -1,0 +1,5 @@
+{
+  "name": "Factuurlijk - Invoice Generator",
+  "description": "A web application for freelancers and small businesses in the Netherlands to easily create, manage, and download professional invoices in PDF format. The app features customer management, invoice line calculations, and customizable templates.",
+  "requestFramePermissions": []
+}
