@@ -106,6 +106,8 @@
 .template-preview-container {
   container-type: inline-size;
   position: relative;
+  /* Smooth transitions for better UX */
+  transition: all 0.2s ease-in-out;
 }
 
 .template-preview-content {
@@ -116,30 +118,40 @@
   /* Ensure content scales properly */
   min-width: 0;
   min-height: 0;
+  /* Smooth scaling transitions */
+  transition: transform 0.2s ease-in-out;
 }
 
 /* Scale down template preview content when container is small */
-@container (max-width: 200px) {
+@container (max-width: 220px) {
   .template-preview-content {
-    transform: scale(0.7);
-    width: 142.86%; /* 100% / 0.7 */
-    height: 142.86%;
+    transform: scale(0.75);
+    width: 133.33%; /* 100% / 0.75 */
+    height: 133.33%;
+  }
+}
+
+@container (max-width: 180px) {
+  .template-preview-content {
+    transform: scale(0.65);
+    width: 153.85%; /* 100% / 0.65 */
+    height: 153.85%;
   }
 }
 
 @container (max-width: 150px) {
   .template-preview-content {
-    transform: scale(0.6);
-    width: 166.67%; /* 100% / 0.6 */
-    height: 166.67%;
+    transform: scale(0.55);
+    width: 181.82%; /* 100% / 0.55 */
+    height: 181.82%;
   }
 }
 
 @container (max-width: 120px) {
   .template-preview-content {
-    transform: scale(0.5);
-    width: 200%; /* 100% / 0.5 */
-    height: 200%;
+    transform: scale(0.45);
+    width: 222.22%; /* 100% / 0.45 */
+    height: 222.22%;
   }
 }
 
@@ -147,6 +159,18 @@
 @media (max-width: 640px) {
   .template-preview-content {
     font-size: clamp(0.5rem, 1vw, 0.7rem);
+  }
+  
+  .template-preview-container {
+    min-height: 140px !important;
+  }
+}
+
+/* Better hover effects for template buttons */
+@media (hover: hover) {
+  .template-preview-container:hover {
+    border-color: rgb(148 163 184);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   }
 }
 

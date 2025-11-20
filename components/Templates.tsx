@@ -68,62 +68,170 @@ const dummyProfileForPreviewButtons: UserProfile = {
   invoice_footer_text: 'Bedankt voor uw bestelling!',
 };
 
+// Interesting template style visual representations with more detail
+const getTemplatePreview = (templateId: TemplateStyle, primaryColor: string) => {
+  const color = primaryColor || defaultCustomizations[templateId].primary_color;
+  
+  switch (templateId) {
+    case 'minimalist':
+      return (
+        <div className="w-full h-full flex flex-col bg-white p-3 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-50 to-white opacity-50"></div>
+          <div className="h-5 bg-gray-900 rounded-sm mb-3 shadow-sm relative z-10"></div>
+          <div className="flex-1 space-y-2.5 relative z-10">
+            <div className="h-2 bg-gray-200 rounded-sm"></div>
+            <div className="h-2 bg-gray-200 rounded-sm w-4/5"></div>
+            <div className="h-2 bg-gray-200 rounded-sm w-3/5"></div>
+            <div className="h-2 bg-gray-200 rounded-sm w-2/3"></div>
+            <div className="h-2 bg-gray-100 rounded-sm w-1/2"></div>
+          </div>
+          <div className="h-4 bg-gray-900 rounded-sm mt-3 shadow-sm relative z-10"></div>
+        </div>
+      );
+    case 'corporate':
+      return (
+        <div className="w-full h-full flex flex-col bg-white relative overflow-hidden">
+          <div className="h-6 rounded-t shadow-md relative z-10" style={{ 
+            background: `linear-gradient(135deg, ${color} 0%, ${color}dd 100%)` 
+          }}></div>
+          <div className="flex-1 p-3 space-y-2.5 relative z-10">
+            <div className="h-2 bg-gray-100 rounded-sm"></div>
+            <div className="h-2 bg-gray-100 rounded-sm"></div>
+            <div className="h-2 bg-gray-200 rounded-sm w-3/4 shadow-sm"></div>
+            <div className="h-2 bg-gray-100 rounded-sm w-2/3"></div>
+            <div className="h-2 bg-gray-50 rounded-sm w-1/2"></div>
+          </div>
+          <div className="h-4 rounded-b shadow-md relative z-10" style={{ 
+            background: `linear-gradient(135deg, ${color} 0%, ${color}dd 100%)` 
+          }}></div>
+        </div>
+      );
+    case 'creative':
+      return (
+        <div className="w-full h-full flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 relative overflow-hidden">
+          <div className="h-8 rounded-t shadow-lg relative z-10" style={{ 
+            background: `linear-gradient(135deg, ${color} 0%, ${color}cc 50%, ${color}dd 100%)` 
+          }}>
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+          </div>
+          <div className="flex-1 p-3 space-y-2.5 relative z-10">
+            <div className="h-2 bg-gray-200 rounded-sm shadow-sm"></div>
+            <div className="h-2 bg-gray-200 rounded-sm w-5/6 shadow-sm"></div>
+            <div className="h-2 bg-gray-100 rounded-sm w-4/6"></div>
+            <div className="h-2 bg-gray-200 rounded-sm w-3/5 shadow-sm"></div>
+            <div className="h-2 bg-gray-50 rounded-sm w-2/5"></div>
+          </div>
+        </div>
+      );
+    case 'sidebar':
+      return (
+        <div className="w-full h-full flex bg-white relative overflow-hidden">
+          <div className="w-1/3 bg-gradient-to-b from-gray-100 to-gray-200 rounded-l shadow-inner relative z-10">
+            <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/20 to-transparent"></div>
+          </div>
+          <div className="flex-1 p-3 space-y-2.5 relative z-10">
+            <div className="h-2 bg-gray-200 rounded-sm shadow-sm"></div>
+            <div className="h-2 bg-gray-200 rounded-sm w-5/6 shadow-sm"></div>
+            <div className="h-2 bg-gray-100 rounded-sm w-4/6"></div>
+            <div className="h-2 bg-gray-200 rounded-sm w-3/5 shadow-sm"></div>
+            <div className="h-2 bg-gray-50 rounded-sm w-2/5"></div>
+          </div>
+        </div>
+      );
+    case 'elegant':
+      return (
+        <div className="w-full h-full flex flex-col bg-white border-2 border-gray-400 rounded relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-50/50 to-transparent"></div>
+          <div className="h-4 border-b-2 border-gray-400 relative z-10"></div>
+          <div className="flex-1 p-3 space-y-2.5 relative z-10">
+            <div className="h-2 bg-gray-300 rounded-sm shadow-sm"></div>
+            <div className="h-2 bg-gray-300 rounded-sm w-5/6 shadow-sm"></div>
+            <div className="h-2 bg-gray-200 rounded-sm w-4/6"></div>
+            <div className="h-2 bg-gray-300 rounded-sm w-3/5 shadow-sm"></div>
+            <div className="h-2 bg-gray-100 rounded-sm w-2/5"></div>
+          </div>
+          <div className="h-5 bg-gray-900 rounded-b shadow-inner relative z-10"></div>
+        </div>
+      );
+    case 'wave':
+      return (
+        <div className="w-full h-full flex flex-col bg-gradient-to-br from-gray-50 to-blue-50 relative overflow-hidden">
+          <div className="h-7 rounded-t shadow-lg relative z-10" style={{ 
+            background: `linear-gradient(135deg, ${color} 0%, ${color}ee 50%, ${color}dd 100%)` 
+          }}>
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent"></div>
+          </div>
+          <div className="flex-1 p-3 space-y-2.5 relative z-10">
+            <div className="h-2 bg-gray-200 rounded-sm shadow-sm"></div>
+            <div className="h-2 bg-gray-200 rounded-sm w-5/6 shadow-sm"></div>
+            <div className="h-2 bg-gray-100 rounded-sm w-4/6"></div>
+            <div className="h-2 bg-gray-200 rounded-sm w-3/5 shadow-sm"></div>
+            <div className="h-2 bg-gray-50 rounded-sm w-2/5"></div>
+          </div>
+          <div className="h-4 rounded-b shadow-lg relative z-10" style={{ 
+            background: `linear-gradient(135deg, ${color} 0%, ${color}ee 50%, ${color}dd 100%)` 
+          }}>
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent"></div>
+          </div>
+        </div>
+      );
+    default:
+      return <div className="w-full h-full bg-white"></div>;
+  }
+};
+
 const TemplateSelectionButton: React.FC<{
   template: { id: TemplateStyle; name: string; description: string };
   isSelected: boolean;
   onClick: () => void;
   previewInvoice: Invoice;
 }> = ({ template, isSelected, onClick, previewInvoice }) => {
+    const primaryColor = defaultCustomizations[template.id].primary_color;
+    
     return (
         <button
             type="button"
             onClick={onClick}
-            className={`group rounded-xl overflow-hidden text-left transition-all duration-200 relative border-2 flex flex-col h-full ${
+            className={`group rounded-xl overflow-hidden text-left transition-all duration-300 relative border-2 flex flex-col transform min-w-0 w-full ${
                 isSelected
-                    ? 'bg-teal-50/50 border-teal-500 shadow-lg'
-                    : 'bg-white border-stone-200 hover:border-stone-400 hover:shadow-md'
+                    ? 'bg-gradient-to-br from-teal-50 via-teal-100/30 to-teal-50 border-teal-500 shadow-2xl ring-2 ring-teal-200 ring-offset-2 scale-[1.02]'
+                    : 'bg-white border-stone-200 hover:border-teal-400 hover:shadow-xl hover:scale-[1.01] hover:bg-gradient-to-br hover:from-stone-50 hover:to-white'
             }`}
             aria-pressed={isSelected}
         >
+            {/* Animated background gradient on hover */}
+            {!isSelected && (
+                <div className="absolute inset-0 bg-gradient-to-br from-teal-50/0 via-teal-50/0 to-teal-50/0 group-hover:from-teal-50/30 group-hover:via-teal-50/20 group-hover:to-teal-50/30 transition-all duration-300 pointer-events-none"></div>
+            )}
+            
             {isSelected && (
-                <div className="absolute top-2 right-2 sm:top-3 sm:right-3 w-5 h-5 sm:w-6 sm:h-6 bg-zinc-800 text-white rounded-full flex items-center justify-center ring-2 sm:ring-4 ring-white z-10">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 sm:h-4 sm:w-4" viewBox="0 0 20 20" fill="currentColor">
+                <div className="absolute top-2 right-2 sm:top-3 sm:right-3 w-7 h-7 bg-gradient-to-br from-teal-600 to-teal-700 text-white rounded-full flex items-center justify-center ring-2 ring-white shadow-xl z-30 transition-all duration-300 scale-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                 </div>
             )}
 
-            {/* Preview Container */}
-            <div className="template-preview-container bg-white shadow-inner rounded-md overflow-hidden border border-stone-200 relative m-3 sm:m-4 flex-shrink-0" style={{ 
+            {/* Preview Container with hover effect */}
+            <div className="relative mx-3 mt-3 mb-2 sm:mx-4 sm:mt-4 sm:mb-3 flex-shrink-0 rounded-lg overflow-hidden shadow-lg border border-stone-200/60 group-hover:shadow-xl group-hover:border-stone-300/60 transition-all duration-300" style={{ 
                 aspectRatio: '210/297',
-                minHeight: '120px',
-                height: 'clamp(120px, 25vw, 200px)'
+                minHeight: '130px',
+                maxHeight: '200px',
+                height: 'clamp(130px, 26vw, 200px)'
             }}>
-                <div
-                    className="absolute top-0 left-0 w-full h-full"
-                    style={{
-                        pointerEvents: 'none',
-                    }}
-                >
-                    <div className="w-full h-full bg-white overflow-hidden template-preview-content">
-                        <InvoicePreview
-                            invoice={previewInvoice}
-                            userProfile={dummyProfileForPreviewButtons}
-                            templateStyle={template.id}
-                            templateCustomizations={{
-                                ...defaultCustomizations[template.id],
-                                font: 'sans',
-                            }}
-                            previewSize="small"
-                        />
-                    </div>
-                </div>
+                <div className="absolute inset-0 bg-gradient-to-br from-white/0 to-black/0 group-hover:from-white/5 group-hover:to-black/5 transition-all duration-300 pointer-events-none z-20"></div>
+                {getTemplatePreview(template.id, primaryColor)}
             </div>
 
-            {/* Text Content with Better Spacing */}
-            <div className="flex-shrink-0 flex flex-col px-3 sm:px-4 pb-3 sm:pb-4 gap-1.5 sm:gap-2 mt-auto">
-                <h4 className="text-sm sm:text-base font-bold text-zinc-800 leading-tight break-words line-clamp-1">{template.name}</h4>
-                <p className="text-xs sm:text-sm text-zinc-600 leading-relaxed line-clamp-2 break-words">{template.description}</p>
+            {/* Template Name with better styling */}
+            <div className="flex-shrink-0 flex items-center justify-center px-4 pb-4 sm:px-5 sm:pb-5 relative z-10">
+                <h4 className={`text-sm sm:text-base font-bold leading-tight transition-all duration-300 ${
+                    isSelected 
+                        ? 'text-teal-900' 
+                        : 'text-zinc-800 group-hover:text-teal-700 group-hover:scale-105'
+                }`}>
+                    {template.name}
+                </h4>
             </div>
         </button>
     );
@@ -221,7 +329,7 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
   }));
 
   return (
-    <div className="h-full flex flex-col p-4 sm:p-6 md:p-8 pb-20 sm:pb-8">
+    <div className="h-full flex flex-col p-4 sm:p-6 md:p-8 pb-20 sm:pb-8 overflow-x-hidden">
         {/* Toast Notification */}
         <div
             className={`fixed top-4 right-4 sm:top-6 sm:right-6 z-50 bg-white border border-green-200 shadow-lg rounded-lg p-3 sm:p-4 flex items-start transition-all duration-300 ease-in-out max-w-[calc(100vw-2rem)] ${
@@ -248,7 +356,7 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
         </header>
 
         {/* Main Content */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 overflow-hidden">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 overflow-hidden overflow-x-hidden min-w-0">
              {/* Left Column: Live Preview - Hidden on mobile, shown on larger screens */}
             <div className="hidden lg:flex lg:col-span-1 bg-stone-100 p-4 rounded-lg flex-col overflow-hidden">
                 <h3 className="text-lg font-semibold text-zinc-800 mb-4 flex-shrink-0">Live Voorbeeld</h3>
@@ -276,19 +384,20 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
             </div>
 
             {/* Right Column: Selection & Customization */}
-            <div className="lg:col-span-1 flex flex-col overflow-hidden">
-                <div className="flex-grow overflow-y-auto space-y-8 sm:space-y-12">
-                         <div>
+            <div className="lg:col-span-1 flex flex-col overflow-hidden overflow-x-hidden min-w-0">
+                <div className="flex-grow overflow-y-auto overflow-x-hidden space-y-8 sm:space-y-12 min-w-0">
+                         <div className="min-w-0">
                             <h3 className="text-base sm:text-lg font-semibold text-zinc-800 mb-4 sm:mb-6">1. Kies een basisstijl</h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 lg:gap-6 min-w-0">
                                 {templates.map(template => (
-                                     <TemplateSelectionButton
-                                        key={template.id}
-                                        template={template}
-                                        isSelected={selectedTemplate === template.id}
-                                        onClick={() => setSelectedTemplate(template.id)}
-                                        previewInvoice={previewInvoice}
-                                    />
+                                    <div key={template.id} className="p-1.5">
+                                        <TemplateSelectionButton
+                                            template={template}
+                                            isSelected={selectedTemplate === template.id}
+                                            onClick={() => setSelectedTemplate(template.id)}
+                                            previewInvoice={previewInvoice}
+                                        />
+                                    </div>
                                 ))}
                             </div>
                          </div>
