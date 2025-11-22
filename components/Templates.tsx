@@ -13,8 +13,8 @@ interface TemplatesProps {
 }
 
 const templates: { id: TemplateStyle; name: string; description: string; }[] = [
-  { id: 'corporate', name: 'Zakelijk', description: 'Een strakke, professionele look voor zakelijke klanten.' },
-  { id: 'creative', name: 'Creatief', description: 'Een opvallend en modern ontwerp met een vleugje kleur.' },
+  { id: 'creative', name: 'Zakelijk', description: 'Een opvallend en modern ontwerp met een vleugje kleur.' },
+  { id: 'corporate', name: 'Creatief', description: 'Een strakke, professionele look voor zakelijke klanten.' },
   { id: 'wave', name: 'Modern', description: 'Een stijlvol template met een unieke golf-header.' },
   { id: 'sidebar', name: 'Structuur', description: 'Een gestructureerde layout met contactinfo in een zijbalk.' },
   { id: 'elegant', name: 'Elegant', description: 'Een klassiek en verfijnd ontwerp met schreefletters.' },
@@ -22,11 +22,11 @@ const templates: { id: TemplateStyle; name: string; description: string; }[] = [
 ];
 
 const defaultCustomizations: Record<TemplateStyle, TemplateCustomizations> = {
-  minimalist: { primary_color: '#1f2937', font: 'mono' },
+  minimalist: { primary_color: '#1f2937', font: 'inter' },
   corporate: { primary_color: '#4b5563', font: 'sans' },
   creative: { primary_color: '#2d3748', font: 'sans' },
   sidebar: { primary_color: '#374151', font: 'sans' },
-  elegant: { primary_color: '#333333', font: 'serif' },
+  elegant: { primary_color: '#333333', font: 'poppins' },
   wave: { primary_color: '#2563eb', font: 'sans' },
 };
 
@@ -140,17 +140,29 @@ const getTemplatePreview = (templateId: TemplateStyle, primaryColor: string) => 
       );
     case 'elegant':
       return (
-        <div className="w-full h-full flex flex-col bg-white border-2 border-gray-400 rounded relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-gray-50/50 to-transparent"></div>
-          <div className="h-4 border-b-2 border-gray-400 relative z-10"></div>
-          <div className="flex-1 p-3 space-y-2.5 relative z-10">
-            <div className="h-2 bg-gray-300 rounded-sm shadow-sm"></div>
-            <div className="h-2 bg-gray-300 rounded-sm w-5/6 shadow-sm"></div>
-            <div className="h-2 bg-gray-200 rounded-sm w-4/6"></div>
-            <div className="h-2 bg-gray-300 rounded-sm w-3/5 shadow-sm"></div>
-            <div className="h-2 bg-gray-100 rounded-sm w-2/5"></div>
+        <div className="w-full h-full flex flex-col bg-gradient-to-br from-white via-gray-50 to-white relative overflow-hidden shadow-lg">
+          <div className="absolute inset-0 bg-gradient-to-br from-transparent via-gray-100/30 to-transparent"></div>
+          {/* Elegant header with serif-style accent */}
+          <div className="h-6 relative z-10" style={{ 
+            background: `linear-gradient(135deg, ${color} 0%, ${color}dd 100%)` 
+          }}>
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent"></div>
           </div>
-          <div className="h-5 bg-gray-900 rounded-b shadow-inner relative z-10"></div>
+          <div className="flex-1 p-3 space-y-2.5 relative z-10">
+            <div className="h-2 bg-gray-200 rounded-sm shadow-sm"></div>
+            <div className="h-2 bg-gray-200 rounded-sm w-5/6 shadow-sm"></div>
+            <div className="h-2 bg-gray-100 rounded-sm w-4/6"></div>
+            <div className="h-2 bg-gray-200 rounded-sm w-3/5 shadow-sm"></div>
+            <div className="h-2 bg-gray-50 rounded-sm w-2/5"></div>
+          </div>
+          {/* Elegant footer */}
+          <div className="h-5 relative z-10" style={{ 
+            background: `linear-gradient(135deg, ${color}dd 0%, ${color} 100%)` 
+          }}>
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent"></div>
+          </div>
         </div>
       );
     case 'wave':
@@ -375,7 +387,7 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
                                     userProfile={{...userProfile, invoice_footer_text: footerText}}
                                     templateStyle={selectedTemplate}
                                     templateCustomizations={customizations}
-                                    previewSize="large"
+                                    previewSize="medium"
                                 />
                             </div>
                         </div>
@@ -449,9 +461,9 @@ export const Templates: React.FC<TemplatesProps> = ({ userProfile, setUserProfil
                                         onChange={(e) => handleCustomizationChange('font', e.target.value)}
                                         className="mt-0 block w-full rounded-md border-stone-300 bg-white px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500"
                                     >
-                                        <option value="sans">Standaard (Sans-serif)</option>
-                                        <option value="serif">Klassiek (Serif)</option>
-                                        <option value="mono">Minimalistisch (Monospace)</option>
+                                        <option value="sans">Standaard (Manrope)</option>
+                                        <option value="poppins">Poppins</option>
+                                        <option value="inter">Inter</option>
                                     </select>
                                 </div>
                                  <div>

@@ -142,12 +142,12 @@ const getDynamicStyling = (lineCount: number, templateStyle: TemplateStyle, isPd
         // Scale up font sizes for PDF to match live preview visual appearance
         // The live preview uses smaller viewport, so we need larger fonts for A4 PDF
         if (templateStyle === 'sidebar') {
-            if (lineCount <= 6) return { fontSizeClass: 'text-[18px]', paddingClass: 'p-3' };
-            if (lineCount <= 12) return { fontSizeClass: 'text-[15px]', paddingClass: 'p-2' };
-            if (lineCount <= 18) return { fontSizeClass: 'text-[13px]', paddingClass: 'p-2' };
-            if (lineCount <= 24) return { fontSizeClass: 'text-[12px]', paddingClass: 'p-1.5' };
-            if (lineCount <= 30) return { fontSizeClass: 'text-[11px]', paddingClass: 'p-1.5' };
-            return { fontSizeClass: 'text-[10px]', paddingClass: 'p-1' };
+            if (lineCount <= 6) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-3' };
+            if (lineCount <= 12) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-2' };
+            if (lineCount <= 18) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-2' };
+            if (lineCount <= 24) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-1.5' };
+            if (lineCount <= 30) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-1.5' };
+            return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-1' };
         }
         // Default styling for other templates - scaled up for PDF
         if (lineCount <= 6) return { fontSizeClass: 'text-[20px]', paddingClass: 'p-3' };
@@ -165,12 +165,12 @@ const getDynamicStyling = (lineCount: number, templateStyle: TemplateStyle, isPd
         case 'large': // For Form & Template live preview pages.
              // Special, smaller font sizes for the sidebar template due to its narrow content area.
             if (templateStyle === 'sidebar') {
-                if (lineCount <= 6) return { fontSizeClass: 'text-[11px]', paddingClass: 'p-1.5' };
-                if (lineCount <= 12) return { fontSizeClass: 'text-[9px]', paddingClass: 'p-1' };
-                if (lineCount <= 18) return { fontSizeClass: 'text-[8px]', paddingClass: 'p-1' };
-                if (lineCount <= 24) return { fontSizeClass: 'text-[7px]', paddingClass: 'p-0.5' };
-                if (lineCount <= 30) return { fontSizeClass: 'text-[6.5px]', paddingClass: 'p-0.5' };
-                return { fontSizeClass: 'text-[6px]', paddingClass: 'p-0.5' };
+                if (lineCount <= 6) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-1.5' };
+                if (lineCount <= 12) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-1' };
+                if (lineCount <= 18) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-1' };
+                if (lineCount <= 24) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-0.5' };
+                if (lineCount <= 30) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-0.5' };
+                return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-0.5' };
             }
             // Default styling for other templates in large preview
             if (lineCount <= 6) return { fontSizeClass: 'text-[13px]', paddingClass: 'p-2' };
@@ -181,12 +181,12 @@ const getDynamicStyling = (lineCount: number, templateStyle: TemplateStyle, isPd
             return { fontSizeClass: 'text-[7px]', paddingClass: 'p-0.5' };
 
         case 'medium': // For Sidebar.
-            if (lineCount <= 6) return { fontSizeClass: 'text-[16px]', paddingClass: 'p-3' };
-            if (lineCount <= 12) return { fontSizeClass: 'text-[14px]', paddingClass: 'p-2' };
-            if (lineCount <= 18) return { fontSizeClass: 'text-[13px]', paddingClass: 'p-2' };
-            if (lineCount <= 24) return { fontSizeClass: 'text-[12px]', paddingClass: 'p-1' };
-            if (lineCount <= 30) return { fontSizeClass: 'text-[11px]', paddingClass: 'p-1' };
-            return { fontSizeClass: 'text-[10px]', paddingClass: 'p-1' };
+            if (lineCount <= 6) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-3' };
+            if (lineCount <= 12) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-2' };
+            if (lineCount <= 18) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-2' };
+            if (lineCount <= 24) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-1' };
+            if (lineCount <= 30) return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-1' };
+            return { fontSizeClass: 'text-[11.7px]', paddingClass: 'p-1' };
 
         case 'small': // For template selection buttons.
         default:
@@ -234,6 +234,8 @@ const fontClasses: Record<TemplateFont, string> = {
   sans: 'font-sans',
   serif: 'font-serif',
   mono: 'font-mono',
+  poppins: 'font-poppins',
+  inter: 'font-inter',
 };
 
 interface BusinessInfoStripProps {
@@ -689,16 +691,16 @@ function CreativeTemplate(props: InvoicePreviewProps) {
 }
 
 function SidebarTemplate(props: InvoicePreviewProps) {
-  const { invoice, userProfile, isPdfMode, previewSize, templateCustomizations } = props;
+  const { invoice, userProfile, isPdfMode, previewSize, templateCustomizations, btwIncluded } = props;
   const subtotal = calculateSubtotalWithDiscounts(invoice.lines);
-  const btwAmount = subtotal * (invoice.btw_percentage / 100);
-  const total = subtotal + btwAmount;
+  const { subtotalExclBtw, btwAmount, total } = calculateBtwAndTotal(subtotal, invoice.btw_percentage, btwIncluded || false);
   const { customer } = invoice;
   const { fontSizeClass, paddingClass } = getDynamicStyling(invoice.lines.length, props.templateStyle || 'sidebar', isPdfMode, previewSize);
   const footerText = getProcessedFooterText(userProfile);
   const pagePaddingClass = (isPdfMode && !previewSize) ? 'p-10' : (isPdfMode && previewSize === 'large') ? 'p-6' : 'p-4';
   const invoiceHasDiscounts = hasDiscounts(invoice.lines);
   const fontClass = fontClasses[templateCustomizations?.font || 'sans'];
+  const primaryColor = templateCustomizations?.primary_color || '#1e3a8a'; // Default dark blue
 
   // Calculate dynamic font sizes for email and date sections
   const emailSectionFontSize = getEmailSectionFontSize(userProfile.email || '', customer?.email || '', fontSizeClass);
@@ -708,67 +710,56 @@ function SidebarTemplate(props: InvoicePreviewProps) {
 
   return (
     <div className={`${fontSizeClass} ${fontClass} bg-white h-full flex shadow-lg`}>
-      {/* Sidebar */}
-      <aside className={`w-1/3 bg-gray-50 ${pagePaddingClass} flex flex-col justify-between border-r border-gray-200`}>
+      {/* Left Sidebar - Dark Blue Background */}
+      <aside className={`w-1/3 ${pagePaddingClass} flex flex-col justify-between text-white`} style={{ backgroundColor: primaryColor }}>
         <div>
-          <div className="mb-6">
-            {userProfile.logo_url ? (
-                <div className="w-28 h-28 bg-white rounded-md flex items-center justify-center p-1 shadow-sm">
-                    <StorageImage key={userProfile.logo_url} bucket="profile-logos" path={userProfile.logo_url} alt="Logo" className="max-h-full max-w-full object-contain"/>
-                </div>
-            ) : (
-                <h1 className="text-[1em] font-bold break-words">{userProfile.name}</h1>
-            )}
+          <h3 className="font-bold uppercase tracking-wider mb-4 text-white">FACTUUR AAN:</h3>
+          <div className={`space-y-2 ${emailSectionFontSize}`}>
+            <p className="font-semibold break-words">{customer.name || 'Klantnaam'}</p>
+            <p className="break-words">{customer.address || 'Adres'}</p>
+            <p className="break-words">{customer.city || 'Stad'}</p>
+            <p className="break-all">{customer.email || 'Email'}</p>
           </div>
-          <div className={`space-y-6 ${emailSectionFontSize}`}>
-             <div>
-              <h3 className="font-bold text-gray-500 uppercase tracking-wider mb-1">Van</h3>
-              <p className="font-bold break-words">{userProfile.name}</p>
-              <p className="break-words">{userProfile.address}</p>
-              <p className="break-all">{userProfile.email}</p>
-              {userProfile.phone_number && <p className="break-words">{userProfile.phone_number}</p>}
-            </div>
-            <div>
-              <h3 className="font-bold text-gray-500 uppercase tracking-wider mb-1">Aan</h3>
-              <p className="font-semibold break-words">{customer.name || 'Klantnaam'}</p>
-              <p className="break-words">{customer.address || 'Adres'}</p>
-              <p className="break-words">{customer.city || 'Stad'}</p>
-              <p className="break-all">{customer.email || 'Email'}</p>
+          
+          {/* Invoice Details */}
+          <div className={`mt-6 ${dateSectionFontSize}`}>
+            <div className="flex flex-col space-y-1">
+              <p className="whitespace-nowrap text-white/95"><span className="font-semibold">Factuurnr:</span> {invoice.invoice_number}</p>
+              <p className="whitespace-nowrap text-white/95"><span className="font-semibold">Datum:</span> {invoiceDate}</p>
+              <p className="whitespace-nowrap text-white/95"><span className="font-semibold">Vervaldatum:</span> {dueDate}</p>
             </div>
           </div>
         </div>
-        <div className="text-gray-600">
-            <h3 className="font-bold text-gray-500 uppercase tracking-wider mb-1">Betaling</h3>
-            <BusinessInfoStrip userProfile={userProfile} className="mb-2" />
-            <p className="whitespace-pre-line break-words mt-2">{footerText}</p>
+        <div className="space-y-1 text-white/95">
+          {customer.btw_number && <p><span className="font-semibold">BTW:</span> {customer.btw_number}</p>}
+          {customer.kvk_number && <p><span className="font-semibold">KvK:</span> {customer.kvk_number}</p>}
+          {userProfile.iban && <p><span className="font-semibold">IBAN:</span> {userProfile.iban}</p>}
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className={`w-2/3 ${pagePaddingClass} flex flex-col min-w-0`}>
-        <header className="flex justify-between items-start mb-4 gap-6">
-          <h2 className="text-[1.25em] font-bold text-gray-800 uppercase tracking-wide whitespace-nowrap">
-            Factuur
-          </h2>
-          <div className={`flex-shrink-0 ${dateSectionFontSize}`}>
-            <div className="flex flex-col items-end">
-              <p className="whitespace-nowrap"><span className="font-semibold">Factuurnr:</span> {invoice.invoice_number}</p>
-              <p className="whitespace-nowrap"><span className="font-semibold">Datum:</span> {invoiceDate}</p>
-              <p className="whitespace-nowrap"><span className="font-semibold">Vervaldatum:</span> {dueDate}</p>
-            </div>
+      {/* Right Main Content - White Background */}
+      <main className={`w-2/3 ${pagePaddingClass} flex flex-col min-w-0 bg-white`}>
+        {/* VAN Section */}
+        <div className="mb-4">
+          <h3 className="font-bold text-gray-500 uppercase tracking-wider mb-1">VAN:</h3>
+          <div className={`space-y-1 ${emailSectionFontSize}`}>
+            <p className="font-bold break-words text-gray-800">{userProfile.name}</p>
+            <p className="break-words text-gray-700">{userProfile.address}</p>
+            <p className="break-all text-gray-700">{userProfile.email}</p>
+            {userProfile.phone_number && <p className="break-words text-gray-700">{userProfile.phone_number}</p>}
           </div>
-        </header>
+        </div>
 
-        <section className={`${isPdfMode ? 'flex-grow min-h-0' : ''} flex flex-col ${isPdfMode ? 'overflow-hidden' : 'overflow-visible'} mt-2`}>
+        {/* Invoice Lines Table */}
+        <section className={`${isPdfMode ? 'flex-grow min-h-0' : ''} flex flex-col ${isPdfMode ? 'overflow-hidden' : 'overflow-visible'} mb-4`}>
             <div className={`${isPdfMode ? 'flex-1 min-h-0 overflow-y-auto' : 'overflow-visible'}`}>
-            <table className="w-full text-left table-fixed">
-                <thead className="sticky top-0 bg-white z-10">
+            <table className="w-full text-left text-[0.9em]">
+                <thead>
                 <tr className="border-b border-gray-300">
-                    <th className={`${paddingClass} font-semibold uppercase text-gray-500 ${invoiceHasDiscounts ? 'w-[40%]' : 'w-[50%]'}`}>Omschrijving</th>
-                    <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 w-[20%]`}>Prijs</th>
-                    <th className={`${paddingClass} text-center font-semibold uppercase text-gray-500 w-[10%]`}>Aantal</th>
-                    {invoiceHasDiscounts && <th className={`${paddingClass} text-center font-semibold uppercase text-gray-500 w-[10%]`}>Korting</th>}
-                    <th className={`${paddingClass} text-right font-semibold uppercase text-gray-500 w-[20%]`}>Totaal</th>
+                    <th className="py-1.5 px-2 font-semibold uppercase text-gray-700 text-[0.85em]">Omschrijving</th>
+                    <th className="py-1.5 px-2 text-right font-semibold uppercase text-gray-700 text-[0.85em]">Prijs</th>
+                    <th className="py-1.5 px-2 text-center font-semibold uppercase text-gray-700 text-[0.85em]">Aantal</th>
+                    <th className="py-1.5 px-2 text-right font-semibold uppercase text-gray-700 text-[0.85em]">Totaal</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -778,11 +769,10 @@ function SidebarTemplate(props: InvoicePreviewProps) {
                     const discountedTotal = lineSubtotal - discount;
                     return (
                         <tr key={line.id} className="border-b border-gray-100">
-                            <td className={`${paddingClass} break-words`}>{line.description || '...'}</td>
-                            <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(line.unit_price)}>{formatCurrency(line.unit_price)}</span></td>
-                            <td className={`${paddingClass} text-center`}>{line.quantity}</td>
-                            {invoiceHasDiscounts && <td className={`${paddingClass} text-center`}>{formatDiscount(line)}</td>}
-                            <td className={`${paddingClass} text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(discountedTotal)}>{formatCurrency(discountedTotal)}</span></td>
+                            <td className="py-1.5 px-2 break-words text-gray-800 text-[0.9em]">{line.description || '...'}</td>
+                            <td className="py-1.5 px-2 text-right whitespace-nowrap text-gray-800 text-[0.9em]"><span className={getCurrencyFontSizeClass(line.unit_price)}>{formatCurrency(line.unit_price)}</span></td>
+                            <td className="py-1.5 px-2 text-center text-gray-800 text-[0.9em]">{line.quantity}</td>
+                            <td className="py-1.5 px-2 text-right whitespace-nowrap text-gray-800 text-[0.9em]"><span className={getCurrencyFontSizeClass(discountedTotal)}>{formatCurrency(discountedTotal)}</span></td>
                         </tr>
                     );
                 })}
@@ -790,27 +780,32 @@ function SidebarTemplate(props: InvoicePreviewProps) {
             </table>
             </div>
         </section>
-        <div className="mt-auto flex-shrink-0">
+
+        {/* Totals Section */}
+        <div className="mt-auto flex-shrink-0 mb-4">
             <div className="flex justify-end">
-                <div className="w-full max-w-xs sm:max-w-sm">
-                    <table className="w-full table-fixed">
-                        <tbody className="border-t-2 border-gray-300">
-                            <tr>
-                                <td className={`${paddingClass} w-3/5 text-right text-gray-600`}>Subtotaal</td>
-                                <td className={`${paddingClass} w-2/5 text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(subtotal)}>{formatCurrency(subtotal)}</span></td>
-                            </tr>
-                            <tr>
-                                <td className={`${paddingClass} w-3/5 text-right text-gray-600`}>BTW ({invoice.btw_percentage}%)</td>
-                                <td className={`${paddingClass} w-2/5 text-right whitespace-nowrap`}><span className={getCurrencyFontSizeClass(btwAmount)}>{formatCurrency(btwAmount)}</span></td>
-                            </tr>
-                            <tr className="font-bold">
-                                <td className={`${paddingClass} w-3/5 text-right pt-2`}>Totaal</td>
-                                <td className={`${paddingClass} w-2/5 text-right pt-2 whitespace-nowrap`}><span className={getCurrencyFontSizeClass(total)}>{formatCurrency(total)}</span></td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div className="w-full max-w-xs">
+                    <div className="space-y-1 text-right">
+                        <div className="flex justify-between">
+                            <span className="text-gray-700">Subtotaal</span>
+                            <span className={`whitespace-nowrap text-gray-800 ${getCurrencyFontSizeClass(subtotalExclBtw)}`}>{formatCurrency(subtotalExclBtw)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-700">BTW ({invoice.btw_percentage}%)</span>
+                            <span className={`whitespace-nowrap text-gray-800 ${getCurrencyFontSizeClass(btwAmount)}`}>{formatCurrency(btwAmount)}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 mt-2 text-white font-bold" style={{ backgroundColor: primaryColor }}>
+                            <span>Totaal</span>
+                            <span className={`whitespace-nowrap ${getCurrencyFontSizeClass(total)}`}>{formatCurrency(total)}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
+        </div>
+
+        {/* Payment Instructions */}
+        <div className="text-gray-700 text-sm">
+            <p className="whitespace-pre-line break-words">{footerText}</p>
         </div>
       </main>
     </div>

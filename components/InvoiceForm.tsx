@@ -412,38 +412,6 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ initialInvoice, userPr
                     <input type="text" id="customerName" name="name" value={invoice.customer.name} onChange={handleCustomerChange} className={`${inputStyle} mt-0`} required />
                 </div>
 
-                {/* KvK and BTW fields - only for Bedrijf */}
-                {customerType === 'bedrijf' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label htmlFor="customerKvk" className="block text-sm font-medium text-zinc-700 mb-2">
-                                KvK-nummer <span className="text-zinc-500 font-normal">(optioneel)</span>
-                            </label>
-                            <input 
-                                type="text" 
-                                id="customerKvk" 
-                                name="kvk_number" 
-                                value={invoice.customer.kvk_number || ''} 
-                                onChange={handleCustomerChange} 
-                                className={`${inputStyle} mt-0`} 
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="customerBtw" className="block text-sm font-medium text-zinc-700 mb-2">
-                                Btw-nummer <span className="text-zinc-500 font-normal">(optioneel)</span>
-                            </label>
-                            <input 
-                                type="text" 
-                                id="customerBtw" 
-                                name="btw_number" 
-                                value={invoice.customer.btw_number || ''} 
-                                onChange={handleCustomerChange} 
-                                className={`${inputStyle} mt-0`} 
-                            />
-                        </div>
-                    </div>
-                )}
-
                 <div>
                     <label htmlFor="customerEmail" className="block text-sm font-medium text-zinc-700 mb-2">E-mail</label>
                     <input type="email" id="customerEmail" name="email" value={invoice.customer.email} onChange={handleCustomerChange} className={`${inputStyle} mt-0`} />

@@ -3,11 +3,17 @@ import { View } from '../types';
 
 const Logo = () => (
     <div className="flex items-center space-x-2">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" fill="#14b8a6"/>
-            <path d="M14 2V8H20" fill="#0d9488"/>
-            <path d="M16 13H8V11H16V13Z" fill="white"/>
-            <path d="M16 17H8V15H16V17Z" fill="white"/>
+        <svg width="32" height="32" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="landingLogoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#14b8a6" />
+                    <stop offset="100%" stopColor="#0d9488" />
+                </linearGradient>
+            </defs>
+            <path d="M16 3H7C5.89543 3 5 3.89543 5 5V23C5 24.1046 5.89543 25 7 25H21C22.1046 25 23 24.1046 23 23V10L16 3Z" fill="url(#landingLogoGradient)"/>
+            <path d="M16 3V10H23" fill="#0d9488" opacity="0.7"/>
+            <rect x="9" y="13" width="10" height="1.5" rx="0.75" fill="white"/>
+            <rect x="9" y="17" width="10" height="1.5" rx="0.75" fill="white"/>
         </svg>
         <span className="text-3xl font-bold text-zinc-800">Factuurlijk</span>
     </div>
@@ -15,7 +21,7 @@ const Logo = () => (
 
 const FooterLogo = () => (
     <div className="flex items-center space-x-2">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" fill="#14b8a6"/>
             <path d="M14 2V8H20" fill="#0d9488"/>
             <path d="M16 13H8V11H16V13Z" fill="white"/>

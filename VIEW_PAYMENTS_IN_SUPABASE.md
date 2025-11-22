@@ -123,3 +123,5 @@ Als je geen betalingen ziet:
 4. Check de server logs voor errors
 
 
+
+

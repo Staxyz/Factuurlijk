@@ -102,7 +102,7 @@ export interface RecurringInvoiceTemplate {
 }
 
 // Defines the available fonts for invoice templates
-export type TemplateFont = 'sans' | 'serif' | 'mono';
+export type TemplateFont = 'sans' | 'serif' | 'mono' | 'poppins' | 'inter';
 
 // Defines the available template styles
 export type TemplateStyle = 'minimalist' | 'corporate' | 'creative' | 'sidebar' | 'elegant' | 'wave';

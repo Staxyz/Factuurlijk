@@ -486,6 +486,21 @@ const App: React.FC = () => {
 
   // Handle OAuth callback and email confirmation from hash fragments or query parameters
   useEffect(() => {
+    // Check if we're on localhost but should be on production (fix for Supabase redirect issue)
+    const isProduction = window.location.hostname.includes('vercel.app') || 
+                        window.location.hostname.includes('factuurlijk') ||
+                        (window.location.protocol === 'https:' && !window.location.hostname.includes('localhost'));
+    
+    // If we're on localhost but have OAuth tokens, redirect to production
+    if (window.location.hostname === 'localhost' && (window.location.hash.includes('access_token') || window.location.search.includes('access_token'))) {
+      const hash = window.location.hash;
+      const search = window.location.search;
+      const productionUrl = `https://factuurlijk.vercel.app${search || hash}`;
+      console.log('⚠️ Detected localhost redirect on production, redirecting to:', productionUrl);
+      window.location.replace(productionUrl);
+      return;
+    }
+    
     // Check if we're returning from an OAuth redirect or email confirmation
     // Supabase can use either hash fragments (#) or query parameters (?)
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
@@ -558,10 +573,12 @@ const App: React.FC = () => {
       
       // Clean up the URL hash/query AFTER setting the view
       // This ensures the view is set before the URL is cleaned
+      // Remove OAuth parameters but keep the dashboard route
       const cleanUrl = () => {
         const cleanPath = window.location.pathname || '/';
-        window.history.replaceState({}, document.title, cleanPath);
-        console.log('🧹 URL cleaned, path:', cleanPath);
+        // Always redirect to dashboard after OAuth, remove OAuth parameters from hash
+        window.history.replaceState({}, document.title, cleanPath + '#/dashboard');
+        console.log('🧹 URL cleaned and set to dashboard:', cleanPath + '#/dashboard');
       };
       
       // Wait for the session to be set by Supabase
@@ -615,8 +632,10 @@ const App: React.FC = () => {
             console.log('✅ User signed in, redirecting to dashboard (current view:', view, ')');
             setView('dashboard');
             if (window.location.hash.includes('access_token') || window.location.search.includes('access_token')) {
-              window.history.replaceState({}, document.title, window.location.pathname || '/');
-              console.log('🧹 Cleaned OAuth params from URL');
+              // Clean OAuth params and ensure we're on dashboard route
+              const cleanPath = window.location.pathname || '/';
+              window.history.replaceState({}, document.title, cleanPath + '#/dashboard');
+              console.log('🧹 Cleaned OAuth params from URL and set to dashboard');
             }
           } else {
             console.log('🟡 Auth event', event, '- NOT changing view, keeping:', view, '(user navigated:', userNavigatedRef.current, ')');
@@ -627,12 +646,18 @@ const App: React.FC = () => {
         setWaitingForOAuth(false);
         userNavigatedRef.current = false; // Reset on logout
 
+        // Always redirect to landing page when session is null (user logged out)
         if (isCheckoutRouteRef.current) {
-          console.log('⚠️ Checkout success route active without session - keeping current view');
-        } else if (event === 'SIGNED_OUT') {
-          // Only redirect to landing on explicit sign out
-          console.log('🔴 User signed out, redirecting to landing');
-          setView('landing');
+          console.log('⚠️ Checkout success route active without session - clearing route and redirecting to landing');
+          setIsCheckoutRoute(false);
+        }
+        
+        console.log('🔴 User signed out, redirecting to landing');
+        setView('landing');
+        
+        // Clear URL hash and query params
+        if (typeof window !== 'undefined') {
+          window.history.replaceState({}, document.title, window.location.pathname || '/');
         }
 
         // Clear user-specific data on logout
@@ -688,12 +713,47 @@ const App: React.FC = () => {
 
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-        const message = getErrorMessage(error, 'Fout bij het uitloggen.');
-        alert(`Er is een fout opgetreden bij het uitloggen: ${message}`);
+    try {
+      // Check if there's an active session before attempting to sign out
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      
+      if (currentSession) {
+        // Only call signOut if there's an active session
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.error('Logout error:', error);
+          // Continue with logout flow even if signOut fails
+        }
+      }
+      
+      // Always navigate to landing page and clear data, regardless of signOut result
+      setView('landing');
+      
+      // Clear any hash or query params
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, document.title, window.location.pathname || '/');
+      }
+      
+      // Clear user-specific data
+      setInvoices([]);
+      setCustomers([]);
+      setUserProfile(mockUserProfile);
+      setInvoiceToEdit(null);
+      setSelectedInvoice(null);
+      setCustomerToEdit(null);
+      userNavigatedRef.current = false;
+      
+      // Clear session state
+      setSession(null);
+    } catch (err) {
+      console.error('Unexpected error during logout:', err);
+      // Even if there's an error, still navigate to landing page
+      setView('landing');
+      setSession(null);
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, document.title, window.location.pathname || '/');
+      }
     }
-    // The onAuthStateChange listener handles state/view changes.
   };
   
   const handleSetCurrentView = (targetView: View) => {

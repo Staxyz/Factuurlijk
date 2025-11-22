@@ -4,11 +4,19 @@
 }
 
 .font-serif {
-  font-family: 'Merriweather', 'Georgia', serif !important;
+  font-family: 'Crimson Text', 'Georgia', serif !important;
 }
 
 .font-mono {
-  font-family: 'IBM Plex Mono', 'Courier New', monospace !important;
+  font-family: 'Source Code Pro', 'Courier New', monospace !important;
+}
+
+.font-poppins {
+  font-family: 'Poppins', 'Arial', sans-serif !important;
+}
+
+.font-inter {
+  font-family: 'Inter', 'Arial', sans-serif !important;
 }
 
 /* Responsive preview scaling - ensures text scales down before overlapping */
